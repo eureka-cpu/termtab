@@ -1,14 +1,17 @@
 module Main (main) where
 
-import           Test.Tasty
+import Test.Tasty
 
-import qualified Termtab.Parser.GP5Spec  as GP5Spec
-import qualified Termtab.Parser.MIDISpec as MIDISpec
-import qualified Termtab.TypesSpec       as TypesSpec
+import Termtab.Parser.GP5Spec qualified as GP5Spec
+import Termtab.Parser.MIDISpec qualified as MIDISpec
+import Termtab.TypesSpec qualified as TypesSpec
 
 main :: IO ()
-main = defaultMain $ testGroup "termtab"
-  [ TypesSpec.tests
-  , MIDISpec.tests
-  , GP5Spec.tests
-  ]
+main =
+    defaultMain $
+        testGroup
+            "termtab"
+            [ TypesSpec.tests
+            , MIDISpec.tests
+            , GP5Spec.tests
+            ]

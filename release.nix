@@ -22,7 +22,7 @@ let
         programs = {
           nixpkgs-fmt.enable = true;
           yamlfmt.enable = true;
-          stylish-haskell.enable = true;
+          fourmolu.enable = true;
         };
       };
     };
