@@ -62,6 +62,7 @@ in
     ] ++ (with pkgs.haskellPackages; [
       cabal-install
       cabal-add
+      haskell-language-server
     ]);
   };
 }
