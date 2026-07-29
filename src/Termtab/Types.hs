@@ -27,8 +27,8 @@ module Termtab.Types
   , ParseError(..)
   ) where
 
-import Data.Map.Strict (Map)
-import Data.Text       (Text)
+import           Data.Map.Strict (Map)
+import           Data.Text       (Text)
 
 newtype MeasureIndex = MeasureIndex Int deriving (Show, Eq, Ord)
 newtype BeatIndex    = BeatIndex Int    deriving (Show, Eq, Ord)

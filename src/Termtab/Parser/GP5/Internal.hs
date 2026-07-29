@@ -24,20 +24,20 @@ module Termtab.Parser.GP5.Internal
   , getIntSizeString
   ) where
 
-import           Control.Monad       (replicateM, replicateM_, when)
-import           Data.Bits           (testBit)
-import qualified Data.ByteString     as BS
+import           Control.Monad      (replicateM, replicateM_, when)
 import           Data.Binary.Get
-import qualified Data.Text           as T
-import qualified Data.Text.Encoding  as TE
+import           Data.Bits          (testBit)
+import qualified Data.ByteString    as BS
+import qualified Data.Text          as T
+import qualified Data.Text.Encoding as TE
 
 data GP5ScoreInfo = GP5ScoreInfo
-  { gsiTitle     :: T.Text
-  , gsiSubtitle  :: T.Text
-  , gsiArtist    :: T.Text
-  , gsiAlbum     :: T.Text
-  , gsiLyricist  :: T.Text
-  , gsiComposer  :: T.Text
+  { gsiTitle    :: T.Text
+  , gsiSubtitle :: T.Text
+  , gsiArtist   :: T.Text
+  , gsiAlbum    :: T.Text
+  , gsiLyricist :: T.Text
+  , gsiComposer :: T.Text
   } deriving (Show, Eq)
 
 data GP5MeasureHeader = GP5MeasureHeader
@@ -48,11 +48,11 @@ data GP5MeasureHeader = GP5MeasureHeader
   } deriving (Show, Eq)
 
 data GP5Track = GP5Track
-  { gtName     :: T.Text
-  , gtStrings  :: [Int]
-  , gtChannel  :: Int
-  , gtProgram  :: Int
-  , gtIsDrums  :: Bool
+  { gtName    :: T.Text
+  , gtStrings :: [Int]
+  , gtChannel :: Int
+  , gtProgram :: Int
+  , gtIsDrums :: Bool
   } deriving (Show, Eq)
 
 data GP5Note = GP5Note

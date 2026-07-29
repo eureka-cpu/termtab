@@ -1,14 +1,14 @@
 module Termtab.Parser.MIDISpec (tests) where
 
-import           Control.Exception       (bracket)
-import qualified Data.ByteString         as BS
-import qualified Data.Map.Strict         as Map
-import           System.Directory        (getTemporaryDirectory, removeFile)
-import           System.IO               (hClose, hSetBinaryMode, openTempFile)
+import           Control.Exception   (bracket)
+import qualified Data.ByteString     as BS
+import qualified Data.Map.Strict     as Map
+import           System.Directory    (getTemporaryDirectory, removeFile)
+import           System.IO           (hClose, hSetBinaryMode, openTempFile)
 import           Test.Tasty
 import           Test.Tasty.HUnit
 
-import           Termtab.Parser.MIDI     (parseMidi)
+import           Termtab.Parser.MIDI (parseMidi)
 import           Termtab.Types
 
 tests :: TestTree

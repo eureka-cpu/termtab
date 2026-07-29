@@ -1,8 +1,8 @@
 module Termtab.Display (printSong) where
 
 import qualified Data.Map.Strict as Map
-import qualified Data.Text.IO    as TIO
 import qualified Data.Text       as T
+import qualified Data.Text.IO    as TIO
 
 import           Termtab.Types
 

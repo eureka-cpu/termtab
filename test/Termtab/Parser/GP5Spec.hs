@@ -1,7 +1,7 @@
 module Termtab.Parser.GP5Spec (tests) where
 
 import           Data.Binary.Get
-import qualified Data.ByteString.Lazy    as LBS
+import qualified Data.ByteString.Lazy        as LBS
 import           Test.Tasty
 import           Test.Tasty.HUnit
 

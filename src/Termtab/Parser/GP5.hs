@@ -1,10 +1,10 @@
 module Termtab.Parser.GP5 (parseGP5) where
 
-import           Control.Monad            (forM, replicateM)
+import           Control.Monad               (forM, replicateM)
 import           Data.Binary.Get
-import qualified Data.ByteString.Lazy     as LBS
-import           Data.List                (transpose)
-import qualified Data.Map.Strict          as Map
+import qualified Data.ByteString.Lazy        as LBS
+import           Data.List                   (transpose)
+import qualified Data.Map.Strict             as Map
 import           Termtab.Parser.GP5.Internal
 import           Termtab.Types
 
@@ -12,7 +12,7 @@ parseGP5 :: FilePath -> IO (Either ParseError Song)
 parseGP5 path = do
   bytes <- LBS.readFile path
   case runGetOrFail parseGP5File bytes of
-    Left  (_, _, err) -> return (Left (ParseErrorMalformed err))
+    Left  (_, _, err)  -> return (Left (ParseErrorMalformed err))
     Right (_, _, song) -> return (Right song)
 
 parseGP5File :: Get Song

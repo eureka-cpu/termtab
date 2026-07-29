@@ -1,11 +1,12 @@
 module Termtab.Parser.Common (parseFile) where
 
-import qualified Data.Text              as T
-import           System.FilePath        (takeExtension)
+import qualified Data.Text           as T
+import           System.FilePath     (takeExtension)
 
-import           Termtab.Types          (ParseError (..), Song, UnsupportedFormat (..))
-import qualified Termtab.Parser.GP5     as GP5
-import qualified Termtab.Parser.MIDI    as MIDI
+import qualified Termtab.Parser.GP5  as GP5
+import qualified Termtab.Parser.MIDI as MIDI
+import           Termtab.Types       (ParseError (..), Song,
+                                      UnsupportedFormat (..))
 
 parseFile :: FilePath -> IO (Either ParseError Song)
 parseFile path = case takeExtension path of
