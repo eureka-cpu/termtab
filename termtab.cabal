@@ -65,6 +65,12 @@ library
         Termtab.Parser.MIDI
         Termtab.Parser.GP5
         Termtab.Parser.GP5.Internal
+        Termtab.Audio
+        Termtab.Audio.Types
+        Termtab.Audio.FluidSynth
+        Termtab.Audio.FluidSynth.Raw
+        Termtab.Audio.Playback
+        Termtab.Audio.PortMidi
     build-depends:
         base       ^>=4.20.2.0
       , text       ^>=2.1
@@ -73,6 +79,9 @@ library
       , HCodecs    ^>=0.5.2
       , binary     ^>=0.8
       , bytestring ^>=0.12
+      , stm        ^>=2.5
+    pkgconfig-depends:
+        fluidsynth >=2.0
     default-language:   GHC2021
     default-extensions: OverloadedStrings
 
@@ -84,6 +93,7 @@ executable termtab
     other-modules:    Paths_termtab
     build-depends:
         base                 ^>=4.20.2.0
+      , containers           ^>=0.7
       , optparse-applicative ^>=0.18.0.0
       , termtab
     default-language:   GHC2021
@@ -98,6 +108,7 @@ test-suite termtab-test
         Termtab.TypesSpec
         Termtab.Parser.MIDISpec
         Termtab.Parser.GP5Spec
+        Termtab.Audio.PlaybackSpec
     build-depends:
         base        ^>=4.20.2.0
       , binary      ^>=0.8

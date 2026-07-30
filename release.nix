@@ -27,7 +27,9 @@ let
       };
     };
 
-  termtab = pkgs.haskellPackages.callCabal2nix "termtab" workspace.src { };
+  termtab = pkgs.haskellPackages.callCabal2nix "termtab" workspace.src {
+    inherit (pkgs) fluidsynth;
+  };
 
   checks = {
     inherit termtab;
@@ -56,6 +58,9 @@ in
   devshell = pkgs.mkShell {
     inputsFrom = [ termtab.env ] ++ builtins.attrValues checks;
     buildInputs = with pkgs; [
+      fluidsynth
+      pkg-config
+      soundfont-fluid
       jujutsu
       nil
       npins
@@ -64,5 +69,6 @@ in
       cabal-add
       haskell-language-server
     ]);
+    TERMTAB_SOUNDFONT = "${pkgs.soundfont-fluid}/share/soundfonts/FluidR3_GM2-2.sf2";
   };
 }
