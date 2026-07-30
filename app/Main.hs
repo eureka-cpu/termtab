@@ -11,9 +11,9 @@ import System.IO (hPrint, hPutStrLn, stderr)
 import Termtab.Audio (AudioConfig (..), BackendType (..), withAudioEngine)
 import Termtab.Audio.Playback (playNote, playSequence)
 import Termtab.Defaults (defaultSong)
-import Termtab.Display (printSong)
 import Termtab.Parser.Common (parseFile)
 import Termtab.Types
+import Termtab.UI (runUI)
 
 data Action
     = ActionDisplay
@@ -95,8 +95,7 @@ main = do
                 Right s -> return s
     case optAction opts of
         ActionDisplay ->
-            -- TODO Phase 4: replace printSong with the brick TUI
-            printSong song
+            runUI (optFile opts) song
         ActionPlayNote midiNote -> do
             sfPath <- getSoundFontPath
             let cfg = AudioConfig{acSoundFontPath = sfPath}

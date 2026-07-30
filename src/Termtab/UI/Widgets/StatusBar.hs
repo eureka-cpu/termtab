@@ -1,0 +1,49 @@
+module Termtab.UI.Widgets.StatusBar (renderStatusBar, statusBarAttr, commandModeAttr) where
+
+import Brick
+import System.FilePath (takeFileName)
+
+import Termtab.Types
+import Termtab.UI.Types
+
+statusBarAttr :: AttrName
+statusBarAttr = attrName "statusBar"
+
+commandModeAttr :: AttrName
+commandModeAttr = attrName "commandMode"
+
+renderStatusBar :: AppState -> Widget ResourceName
+renderStatusBar st = case asInputMode st of
+    CommandMode buf ->
+        withAttr commandModeAttr $
+            str (":" ++ buf)
+    _ ->
+        withAttr statusBarAttr $
+            hBox
+                [ fileInfo
+                , fill ' '
+                , tempoInfo
+                , fill ' '
+                , positionInfo
+                , case asMessage st of
+                    Just msg -> str ("  " ++ msg)
+                    Nothing -> emptyWidget
+                ]
+  where
+    fileInfo = str $ case asFilePath st of
+        Just fp -> "File: " ++ takeFileName fp
+        Nothing -> "[scratch]"
+
+    tempoInfo =
+        let Tempo bpm = songTempo (asSong st)
+            timeSig = case currentMeasure st of
+                Just m ->
+                    let TimeSignature num den = timeSignature m
+                     in show num ++ "/" ++ show den
+                Nothing -> "4/4"
+         in str ("Tempo: " ++ show bpm ++ " BPM  " ++ timeSig)
+
+    positionInfo =
+        let MeasureIndex m = asCurrentMeasure st
+            total = measureCount st
+         in str ("Bar: " ++ show (m + 1) ++ "/" ++ show total ++ "  [zoom: " ++ show (asZoom st) ++ "]")

@@ -6,6 +6,7 @@ import Termtab.Audio.PlaybackSpec qualified as PlaybackSpec
 import Termtab.Parser.GP5Spec qualified as GP5Spec
 import Termtab.Parser.MIDISpec qualified as MIDISpec
 import Termtab.TypesSpec qualified as TypesSpec
+import Termtab.UI.TypesSpec qualified as UITypesSpec
 
 main :: IO ()
 main =
@@ -16,4 +17,5 @@ main =
             , MIDISpec.tests
             , GP5Spec.tests
             , PlaybackSpec.tests
+            , UITypesSpec.tests
             ]

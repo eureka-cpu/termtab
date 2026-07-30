@@ -71,15 +71,26 @@ library
         Termtab.Audio.FluidSynth.Raw
         Termtab.Audio.Playback
         Termtab.Audio.PortMidi
+        Termtab.UI
+        Termtab.UI.Types
+        Termtab.UI.Keybindings
+        Termtab.UI.Widgets.Tablature
+        Termtab.UI.Widgets.Notation
+        Termtab.UI.Widgets.StatusBar
+        Termtab.UI.Widgets.TrackPanel
     build-depends:
-        base       ^>=4.20.2.0
-      , text       ^>=2.1
-      , containers ^>=0.7
-      , filepath   ^>=1.5
-      , HCodecs    ^>=0.5.2
-      , binary     ^>=0.8
-      , bytestring ^>=0.12
-      , stm        ^>=2.5
+        base             ^>=4.20.2.0
+      , text             ^>=2.1
+      , containers       ^>=0.7
+      , filepath         ^>=1.5
+      , HCodecs          ^>=0.5.2
+      , binary           ^>=0.8
+      , bytestring       ^>=0.12
+      , stm              ^>=2.5
+      , brick            ^>=2.9
+      , vty              ^>=6.4
+      , vty-crossplatform ^>=0.4
+      , microlens        ^>=0.4
     pkgconfig-depends:
         fluidsynth >=2.0
     default-language:   GHC2021
@@ -89,6 +100,7 @@ executable termtab
     import:           warnings
     main-is:          Main.hs
     hs-source-dirs:   app
+    ghc-options:      -threaded
     autogen-modules:  Paths_termtab
     other-modules:    Paths_termtab
     build-depends:
@@ -109,6 +121,7 @@ test-suite termtab-test
         Termtab.Parser.MIDISpec
         Termtab.Parser.GP5Spec
         Termtab.Audio.PlaybackSpec
+        Termtab.UI.TypesSpec
     build-depends:
         base        ^>=4.20.2.0
       , binary      ^>=0.8
