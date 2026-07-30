@@ -70,6 +70,7 @@ library
         Termtab.Audio.FluidSynth
         Termtab.Audio.FluidSynth.Raw
         Termtab.Audio.Playback
+        Termtab.Audio.PlaybackThread
         Termtab.Audio.PortMidi
         Termtab.UI
         Termtab.UI.Types
@@ -125,6 +126,7 @@ test-suite termtab-test
     build-depends:
         base        ^>=4.20.2.0
       , binary      ^>=0.8
+      , brick       ^>=2.9
       , bytestring  ^>=0.12
       , containers  ^>=0.7
       , directory   ^>=1.3

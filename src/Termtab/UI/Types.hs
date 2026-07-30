@@ -29,7 +29,10 @@ module Termtab.UI.Types (
     measureCount,
 ) where
 
+import Brick.BChan (BChan)
 import Data.Map.Strict qualified as Map
+import Termtab.Audio.PlaybackThread (PlaybackEnv)
+import Termtab.Audio.Types (PlaybackStatus (..))
 import Termtab.Types
 
 data DisplayMode
@@ -51,7 +54,7 @@ data ResourceName
     deriving (Show, Eq, Ord)
 
 data AppEvent
-    = Tick
+    = PlaybackTick
     deriving (Show, Eq)
 
 data AppState = AppState
@@ -65,11 +68,15 @@ data AppState = AppState
     , asDisplayModes :: Map.Map TrackIndex DisplayMode
     , asZoom :: Int
     , asMessage :: Maybe String
+    , asPlaybackStatus :: PlaybackStatus
+    , asPlayheadMeasure :: Maybe MeasureIndex
+    , asPlayheadBeat :: Maybe BeatIndex
+    , asPlaybackEnv :: Maybe PlaybackEnv
+    , asBChan :: BChan AppEvent
     }
-    deriving (Show)
 
-initAppState :: Maybe FilePath -> Song -> AppState
-initAppState mPath song =
+initAppState :: Maybe FilePath -> Song -> BChan AppEvent -> AppState
+initAppState mPath song bChan =
     AppState
         { asSong = song
         , asFilePath = mPath
@@ -81,6 +88,11 @@ initAppState mPath song =
         , asDisplayModes = Map.fromList defaultModes
         , asZoom = 4
         , asMessage = Nothing
+        , asPlaybackStatus = Stopped
+        , asPlayheadMeasure = Nothing
+        , asPlayheadBeat = Nothing
+        , asPlaybackEnv = Nothing
+        , asBChan = bChan
         }
   where
     defaultModes =

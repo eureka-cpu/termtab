@@ -1,4 +1,4 @@
-module Termtab.UI.Widgets.Tablature (renderTablature, cursorAttr, barLineAttr, stringLabelAttr) where
+module Termtab.UI.Widgets.Tablature (renderTablature, cursorAttr, playheadAttr, barLineAttr, stringLabelAttr) where
 
 import Brick hiding (zoom)
 import Data.Map.Strict qualified as Map
@@ -8,6 +8,9 @@ import Termtab.UI.Types
 
 cursorAttr :: AttrName
 cursorAttr = attrName "cursor"
+
+playheadAttr :: AttrName
+playheadAttr = attrName "playhead"
 
 barLineAttr :: AttrName
 barLineAttr = attrName "barLine"
@@ -149,9 +152,14 @@ renderBeatCell st _tIdx isFocused zoom sIdx mi bi beats =
                 && mi == asCurrentMeasure st
                 && bi == asCurrentBeat st
                 && sIdx == asCurrentString st
-     in if isCursor
-            then withAttr cursorAttr (str cell)
-            else str cell
+        isPlayhead =
+            asPlayheadMeasure st == Just mi
+                && asPlayheadBeat st == Just bi
+        attr
+            | isCursor = cursorAttr
+            | isPlayhead = playheadAttr
+            | otherwise = mempty
+     in withAttr attr (str cell)
 
 -- | Find the fret number for a given string in a beat
 fretOnString :: StringIndex -> Beat -> Maybe Int

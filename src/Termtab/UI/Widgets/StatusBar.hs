@@ -3,6 +3,7 @@ module Termtab.UI.Widgets.StatusBar (renderStatusBar, statusBarAttr, commandMode
 import Brick
 import System.FilePath (takeFileName)
 
+import Termtab.Audio.Types (PlaybackStatus (..))
 import Termtab.Types
 import Termtab.UI.Types
 
@@ -25,6 +26,7 @@ renderStatusBar st = case asInputMode st of
                 , tempoInfo
                 , fill ' '
                 , positionInfo
+                , playbackInfo
                 , case asMessage st of
                     Just msg -> str ("  " ++ msg)
                     Nothing -> emptyWidget
@@ -47,3 +49,8 @@ renderStatusBar st = case asInputMode st of
         let MeasureIndex m = asCurrentMeasure st
             total = measureCount st
          in str ("Bar: " ++ show (m + 1) ++ "/" ++ show total ++ "  [zoom: " ++ show (asZoom st) ++ "]")
+
+    playbackInfo = case asPlaybackStatus st of
+        Playing -> str " [PLAYING]"
+        Paused -> str " [PAUSED]"
+        Stopped -> emptyWidget
