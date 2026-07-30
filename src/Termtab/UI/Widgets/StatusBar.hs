@@ -32,9 +32,11 @@ renderStatusBar st = case asInputMode st of
                     Nothing -> emptyWidget
                 ]
   where
-    fileInfo = str $ case asFilePath st of
-        Just fp -> "File: " ++ takeFileName fp
-        Nothing -> "[scratch]"
+    fileInfo =
+        let modified = if null (asUndoStack st) then "" else " [modified]"
+         in str $ case asFilePath st of
+                Just fp -> "File: " ++ takeFileName fp ++ modified
+                Nothing -> "[scratch]" ++ modified
 
     tempoInfo =
         let Tempo bpm = songTempo (asSong st)

@@ -73,6 +73,9 @@ data AppState = AppState
     , asPlayheadBeat :: Maybe BeatIndex
     , asPlaybackEnv :: Maybe PlaybackEnv
     , asBChan :: BChan AppEvent
+    , asUndoStack :: [Song]
+    , asRedoStack :: [Song]
+    , asFretEntry :: Maybe FretNumber
     }
 
 initAppState :: Maybe FilePath -> Song -> BChan AppEvent -> AppState
@@ -93,6 +96,9 @@ initAppState mPath song bChan =
         , asPlayheadBeat = Nothing
         , asPlaybackEnv = Nothing
         , asBChan = bChan
+        , asUndoStack = []
+        , asRedoStack = []
+        , asFretEntry = Nothing
         }
   where
     defaultModes =
@@ -137,11 +143,9 @@ measureCount st = length (songMeasures (asSong st))
 moveBeatRight :: AppState -> AppState
 moveBeatRight st =
     let BeatIndex b = asCurrentBeat st
-        maxBeat = case currentTrack st of
+        maxBeat = case currentMeasure st of
+            Just m -> let TimeSignature num _ = timeSignature m in num - 1
             Nothing -> 0
-            Just t ->
-                let beats = beatsForTrackMeasure t (asCurrentMeasure st)
-                 in max 0 (length beats - 1)
      in st{asCurrentBeat = BeatIndex (min (b + 1) maxBeat)}
 
 moveBeatLeft :: AppState -> AppState
@@ -189,11 +193,10 @@ goToStart st =
 goToEnd :: AppState -> AppState
 goToEnd st =
     let lastM = max 0 (measureCount st - 1)
-        lastBeat = case currentTrack st of
-            Nothing -> 0
-            Just t ->
-                let beats = beatsForTrackMeasure t (MeasureIndex lastM)
-                 in max 0 (length beats - 1)
+        measures = songMeasures (asSong st)
+        lastBeat = case drop lastM measures of
+            (m : _) -> let TimeSignature num _ = timeSignature m in num - 1
+            [] -> 0
      in st
             { asCurrentMeasure = MeasureIndex lastM
             , asCurrentBeat = BeatIndex lastBeat
@@ -204,11 +207,9 @@ goToMeasureStart st = st{asCurrentBeat = BeatIndex 0}
 
 goToMeasureEnd :: AppState -> AppState
 goToMeasureEnd st =
-    let lastBeat = case currentTrack st of
+    let lastBeat = case currentMeasure st of
+            Just m -> let TimeSignature num _ = timeSignature m in num - 1
             Nothing -> 0
-            Just t ->
-                let beats = beatsForTrackMeasure t (asCurrentMeasure st)
-                 in max 0 (length beats - 1)
      in st{asCurrentBeat = BeatIndex lastBeat}
 
 goToFirstString :: AppState -> AppState

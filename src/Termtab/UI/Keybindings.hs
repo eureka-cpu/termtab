@@ -5,18 +5,23 @@ import Brick.BChan (BChan, writeBChan)
 import Control.Concurrent.STM (readTVarIO)
 import Control.Exception (SomeException, catch)
 import Control.Monad.IO.Class (liftIO)
+import Data.Char (digitToInt, isDigit)
 import Graphics.Vty qualified as V
 import System.Environment (lookupEnv)
+import System.FilePath (replaceExtension)
 
 import Termtab.Audio.PlaybackThread
 import Termtab.Audio.Types (AudioConfig (..), PlaybackStatus (..))
+import Termtab.Export.MIDI (exportMidi)
+import Termtab.Types (Song)
+import Termtab.UI.Editing
 import Termtab.UI.Types
 
 handleEvent :: BrickEvent ResourceName AppEvent -> EventM ResourceName AppState ()
-handleEvent (VtyEvent (V.EvKey key _mods)) = do
+handleEvent (VtyEvent (V.EvKey key mods)) = do
     mode <- gets asInputMode
     case mode of
-        NormalMode -> handleNormal key
+        NormalMode -> handleNormal key mods
         GoToMode -> handleGoTo key
         CommandMode buf -> handleCommand key buf
 handleEvent (AppEvent PlaybackTick) = handlePlaybackTick
@@ -41,20 +46,37 @@ handlePlaybackTick = do
                     , asPlaybackStatus = status
                     }
 
-handleNormal :: V.Key -> EventM ResourceName AppState ()
-handleNormal key = case key of
+handleNormal :: V.Key -> [V.Modifier] -> EventM ResourceName AppState ()
+handleNormal key mods = case key of
+    -- Quit / mode switching
     V.KEsc -> handleEsc
-    V.KChar 'h' -> modify $ clearMessage . moveBeatLeft
-    V.KChar 'l' -> modify $ clearMessage . moveBeatRight
-    V.KChar 'k' -> modify $ clearMessage . moveStringUp
-    V.KChar 'j' -> modify $ clearMessage . moveStringDown
-    V.KChar 'W' -> modify $ clearMessage . moveMeasureForward
-    V.KChar 'B' -> modify $ clearMessage . moveMeasureBack
-    V.KChar 'g' -> modify $ \st -> st{asInputMode = GoToMode, asMessage = Just "g-"}
-    V.KChar 't' -> modify $ clearMessage . cycleDisplayMode
-    V.KChar '+' -> modify $ clearMessage . zoomIn
-    V.KChar '-' -> modify $ clearMessage . zoomOut
-    V.KChar ':' -> modify $ \st -> st{asInputMode = CommandMode "", asMessage = Nothing}
+    V.KChar ':' -> modify $ clearFretEntry . \st -> st{asInputMode = CommandMode "", asMessage = Nothing}
+    -- Navigation (clears fret entry)
+    V.KChar 'h' -> modify $ clearFretEntry . clearMessage . moveBeatLeft
+    V.KChar 'l' | V.MCtrl `notElem` mods -> modify $ clearFretEntry . clearMessage . moveBeatRight
+    V.KChar 'k' -> modify $ clearFretEntry . clearMessage . moveStringDown
+    V.KChar 'j' -> modify $ clearFretEntry . clearMessage . moveStringUp
+    V.KChar 'W' -> modify $ clearFretEntry . clearMessage . moveMeasureForward
+    V.KChar 'B' -> modify $ clearFretEntry . clearMessage . moveMeasureBack
+    V.KChar 'g' -> modify $ clearFretEntry . \st -> st{asInputMode = GoToMode, asMessage = Just "g-"}
+    -- Display
+    V.KChar 't' -> modify $ clearFretEntry . clearMessage . cycleDisplayMode
+    V.KChar '+' -> modify $ clearFretEntry . clearMessage . zoomIn
+    V.KChar '-' -> modify $ clearFretEntry . clearMessage . zoomOut
+    -- Editing: fret entry
+    V.KChar c | isDigit c -> modify $ clearMessage . enterFretDigit (digitToInt c)
+    -- Editing: delete
+    V.KChar 'd' -> modify $ clearFretEntry . clearMessage . deleteNoteAtCursor
+    V.KBS -> modify $ clearFretEntry . clearMessage . deleteNoteAtCursor
+    -- Editing: rest
+    V.KChar 'r' -> modify $ clearFretEntry . clearMessage . insertRest
+    -- Editing: duration cycle
+    V.KBackTab -> modify $ clearFretEntry . clearMessage . cycleDuration
+    -- Undo/Redo
+    V.KChar 'u' -> modify $ clearFretEntry . undo
+    V.KChar 'U' -> modify $ clearFretEntry . redo
+    -- Save (Ctrl+s)
+    V.KChar 's' | V.MCtrl `elem` mods -> doSave
     _ -> return ()
 
 handleEsc :: EventM ResourceName AppState ()
@@ -104,7 +126,32 @@ dispatchCommand cmd = case cmd of
     "exit" -> halt
     "p" -> startPlay
     "play" -> startPlay
+    "w" -> doSave
+    "write" -> doSave
+    "save" -> doSave
     _ -> modify $ backToNormal . setMessage ("Unknown command: " ++ cmd)
+
+doSave :: EventM ResourceName AppState ()
+doSave = do
+    st <- get
+    let song = asSong st
+        savePath = case asFilePath st of
+            Just fp
+                | any (`isSuffixOf'` fp) [".mid", ".midi"] -> fp
+                | otherwise -> replaceExtension fp ".mid"
+            Nothing -> "untitled.mid"
+    result <- liftIO $ saveToFile savePath song
+    case result of
+        Right () -> modify $ backToNormal . setMessage ("Saved: " ++ savePath)
+        Left err -> modify $ backToNormal . setMessage ("Save failed: " ++ err)
+
+saveToFile :: FilePath -> Song -> IO (Either String ())
+saveToFile path song =
+    (Right <$> exportMidi path song)
+        `catch` \(e :: SomeException) -> return (Left (show e))
+
+isSuffixOf' :: String -> String -> Bool
+isSuffixOf' suffix s = drop (length s - length suffix) s == suffix
 
 startPlay :: EventM ResourceName AppState ()
 startPlay = do
@@ -112,7 +159,6 @@ startPlay = do
     case asPlaybackStatus st of
         Playing -> modify $ backToNormal . setMessage "Already playing"
         Paused -> do
-            -- Resume from paused position
             case asPlaybackEnv st of
                 Just env -> do
                     liftIO $ resumePlayback env (asCurrentMeasure st)

@@ -72,7 +72,9 @@ library
         Termtab.Audio.Playback
         Termtab.Audio.PlaybackThread
         Termtab.Audio.PortMidi
+        Termtab.Export.MIDI
         Termtab.UI
+        Termtab.UI.Editing
         Termtab.UI.Types
         Termtab.UI.Keybindings
         Termtab.UI.Widgets.Tablature
@@ -122,6 +124,7 @@ test-suite termtab-test
         Termtab.Parser.MIDISpec
         Termtab.Parser.GP5Spec
         Termtab.Audio.PlaybackSpec
+        Termtab.UI.EditingSpec
         Termtab.UI.TypesSpec
     build-depends:
         base        ^>=4.20.2.0

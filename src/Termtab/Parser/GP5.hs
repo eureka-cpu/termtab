@@ -108,7 +108,7 @@ convertNote stringPitches n =
             { notePitch = Pitch (basePitch + gnFret n)
             , noteVelocity = Velocity (gnDynamic n * 8)
             , noteEffects = []
-            , noteString = Just (StringIndex (gnString n))
+            , noteString = Just (StringIndex (gnString n - 1))
             , noteFret = Just (FretNumber (gnFret n))
             }
 

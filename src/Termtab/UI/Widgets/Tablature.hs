@@ -36,7 +36,7 @@ renderTablature st tIdx = Widget Greedy Fixed $ do
     render $
         vBox
             [ renderStringLine st tIdx track isFocused labels labelWidth zoom visibleMeasures (StringIndex si)
-            | si <- [0 .. nStrings - 1]
+            | si <- reverse [0 .. nStrings - 1]
             ]
 
 getTrack :: TrackIndex -> Song -> Track
