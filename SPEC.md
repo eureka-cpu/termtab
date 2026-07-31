@@ -205,13 +205,102 @@ Toggle keybinding: `t` cycles through available modes for the focused track.
 
 ### Tablature Widget
 
-A custom `brick` `Widget` that:
+A custom `brick` `Widget` that uses Unicode box-drawing characters for a grid-cell rendering style.
+
+#### Rendering Style
+
+Uses Unicode box-drawing characters (`─`, `│`, `┌`, `┐`, `└`, `┘`, `├`, `┤`, `┬`, `┴`) for a bordered grid. Each beat is a cell with fret numbers centered inside. A **stem row** above the grid shows note durations and rests using vertical stems and beams, matching the rhythm notation style of Guitar Pro.
+
+**Tab rendering (GP-style):**
+
+The tab uses the same visual style as Guitar Pro: continuous horizontal lines for strings, fret numbers sitting on the lines (replacing the line segment), vertical bar lines for measure boundaries, and "TAB" label on the left. This is text-rendered via brick/vty.
+
+```
+ 22                │23                           │24
+T──────────────────│─────────────────────────────│──────────────────────────
+A──────────────────│─────────────────────────────│──────────────────────────
+B──────────────────│─────────────────────────────│──────────────────────────
+───────────────────│─────────────────────────────│──1────1────1────1────1───
+─────0───1───0─────│──0──0──0──0──0──0──0────────│──────────────────────────
+──0────────────────│──1──1──1──1──1──1──1────────│──1────1────1────1────1───
+```
+
+**Key rendering rules:**
+- String lines are continuous `─` characters
+- Fret numbers replace line segments where notes occur (e.g., `──5──` or `──12──`)
+- Single and double-digit frets both sit on the line: `──5──` vs `──12──`
+- Measure bar lines `│` run vertically through all strings
+- Measure numbers appear above each bar
+- "TAB" replaces string tuning labels on the left (GP convention)
+- Empty strings show unbroken lines `────────`
+
+**"Both" mode — standard notation rendered as inline image above tab (GP-style):**
+
+When display mode is `TabAndNotation`, a full graphical notation image renders above the tab grid using the **Kitty graphics protocol**. This produces pixel-rendered notation (treble clef, note heads, stems, beams, rests, accidentals, key/time signatures) matching Guitar Pro's visual quality.
+
+**Critical: the notation image and tab grid must be column-aligned.** The notation renderer must produce an image whose beat positions match the tab's column positions pixel-for-pixel. Measure bar lines run continuously through both.
+
+#### Notation Rendering Pipeline
+
+1. Convert visible measures from `Song` data into Lilypond syntax (`.ly`)
+2. Invoke `lilypond` subprocess to render to PNG (cropped, transparent background)
+3. Encode PNG as base64 and display inline via Kitty graphics protocol escape sequences
+4. The image width is computed from the tab's column layout so beats align vertically
+
+If Lilypond proves impractical (latency, installation burden, layout control), switch to a custom renderer using `diagrams-cairo`:
+- Draw staff lines, clef, key/time signatures, note heads, stems, beams, rests directly
+- Render to PNG via Cairo
+- Full control over horizontal spacing to match tab columns exactly
+- More work upfront but no external dependency beyond Cairo (available via Nix)
+
+#### Terminal Graphics Protocol
+
+**Primary: Kitty graphics protocol**
+- Send PNG images inline via APC escape sequences with base64-encoded data
+- Images integrate with text and scroll naturally
+- Custom implementation (~300 LoC) in `Termtab.Graphics.Kitty`
+
+**Fallback: Sixel** (future)
+- Use the `sixel` Hackage package for terminals that support Sixel but not Kitty (xterm, iTerm2, mlterm)
+- Same rendering pipeline, different display protocol
+
+**Fallback: Unicode text** (degraded)
+- For terminals with no graphics support, fall back to the current ASCII staff placeholder
+- `NotationOnly` mode shows the text stub; `TabAndNotation` shows tab only with a message
+
+#### Nix Integration
+
+- Add `lilypond` to devshell and package runtime dependencies
+- Add `diagrams-cairo` or `cairo` to cabal deps (only if custom renderer is needed)
+- Kitty protocol implementation is pure Haskell (no extra deps beyond `base64-bytestring`)
+
+#### Beat Spacing
+
+- Beat positions are duration-proportional: a quarter note gets more horizontal space than an eighth
+- Minimum spacing: **3 columns** per beat (ensures double-digit frets like `12` fit)
+- Quarter note at zoom 4: 4 columns of line characters around the fret number
+- Eighth note at zoom 4: max(3, 2) = 3 columns
+- Fret numbers replace line segments: `──5──` (single digit) or `──12──` (double digit)
+
+#### String Order
+
+Strings render high to low (standard tab convention):
+- Top line: high E (thinnest string)
+- Bottom line: low E (thickest string)
+
+#### Visual Indicators
+
+- **Edit cursor**: reverse video on the fret number (or line segment) at `(currentBeat, currentString)`
+- **Playhead**: green background on the entire column at `(playheadBeat)` across all strings
+- **Visual selection**: blue background on selected beat range (for combine operations)
+
+#### Behavior
 
 - Uses `getContext` to determine terminal width
-- Draws N horizontal lines (6 for guitar, 4 for bass)
-- Renders fret numbers at column positions derived from beat offsets and zoom level
-- Highlights the playhead cursor column during playback
-- Highlights the edit cursor during editing
+- Measure width is fixed by time signature (e.g., 4/4 = 4×zoom columns)
+- Beats render proportionally within the fixed measure width
+- Empty beat positions (beyond the beat list) render as unbroken line segments
+- Viewport starts from measure 0; scrolls forward only when cursor exceeds visible area
 
 ### App State
 
