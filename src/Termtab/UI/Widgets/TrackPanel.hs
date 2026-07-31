@@ -17,12 +17,11 @@ renderTrackPanel st tIdx track =
     let TrackIndex i = tIdx
         label = "Track " ++ show (i + 1) ++ ": " ++ T.unpack (trackName track)
         isFocused = tIdx == asCurrentTrack st
-        border =
+        header =
             if isFocused
-                then withAttr focusedTrackAttr (str ("─ " ++ label ++ " "))
-                else str ("─ " ++ label ++ " ")
+                then withAttr focusedTrackAttr (str label)
+                else str label
         mode = Map.findWithDefault (defaultModeFor track) tIdx (asDisplayModes st)
-        -- Force NotationOnly for Standard instruments
         effectiveMode = case trackInstrument track of
             Standard _ -> NotationOnly
             _ -> mode
@@ -34,7 +33,7 @@ renderTrackPanel st tIdx track =
                     [ renderNotation st tIdx
                     , renderTablature st tIdx
                     ]
-     in vBox [border <+> fill '─', content]
+     in vBox [header, content]
 
 defaultModeFor :: Track -> DisplayMode
 defaultModeFor track = case trackInstrument track of
