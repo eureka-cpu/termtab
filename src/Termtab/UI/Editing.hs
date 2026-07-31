@@ -4,6 +4,10 @@ module Termtab.UI.Editing (
     deleteNoteAtCursor,
     insertRest,
     cycleDuration,
+    subdivideBeat,
+    combineBeats,
+    addMeasure,
+    deleteMeasure,
     -- Undo/redo
     withUndo,
     undo,
@@ -16,6 +20,7 @@ module Termtab.UI.Editing (
 ) where
 
 import Data.Map.Strict qualified as Map
+import Termtab.Defaults (defaultMeasureBeats)
 import Termtab.Types
 import Termtab.UI.Types
 
@@ -180,3 +185,148 @@ ensureLength :: Int -> [Beat] -> [Beat]
 ensureLength n beats
     | length beats >= n = beats
     | otherwise = beats ++ replicate (n - length beats) defaultBeat
+
+-- Measure operations
+
+addMeasure :: AppState -> AppState
+addMeasure st =
+    let song = asSong st
+        MeasureIndex curM = asCurrentMeasure st
+        -- Inherit time/key sig from current measure
+        curMeasure = case currentMeasure st of
+            Just m -> m
+            Nothing -> Measure (MeasureIndex 0) (TimeSignature 4 4) (KeySignature 0 Major) Nothing
+        newMIdx = MeasureIndex (curM + 1)
+        newMeasure =
+            curMeasure
+                { measureIndex = newMIdx
+                , tempoChange = Nothing
+                }
+        -- Insert measure into songMeasures after current position
+        (before, after) = splitAt (curM + 1) (songMeasures song)
+        -- Re-index measures after insertion
+        reindexed = zipWith (\i m -> m{measureIndex = MeasureIndex i}) [0 ..] (before ++ [newMeasure] ++ after)
+        -- Add default beats for the new measure in all tracks
+        newBeats = defaultMeasureBeats (timeSignature curMeasure)
+        updatedTracks =
+            map
+                ( \track ->
+                    -- Shift existing beat map entries after the insertion point
+                    let shifted = Map.mapKeys (\(MeasureIndex k) -> if k > curM then MeasureIndex (k + 1) else MeasureIndex k) (trackBeats track)
+                     in track{trackBeats = Map.insert newMIdx newBeats shifted}
+                )
+                (songTracks song)
+        newSong = song{songMeasures = reindexed, songTracks = updatedTracks}
+     in withUndo (const newSong) st
+
+deleteMeasure :: AppState -> AppState
+deleteMeasure st
+    | measureCount st <= 1 = st{asMessage = Just "Cannot delete last measure"}
+    | otherwise =
+        let song = asSong st
+            MeasureIndex curM = asCurrentMeasure st
+            -- Remove measure from songMeasures
+            measures' = [m | (i, m) <- zip [0 :: Int ..] (songMeasures song), i /= curM]
+            reindexed = zipWith (\i m -> m{measureIndex = MeasureIndex i}) [0 ..] measures'
+            -- Remove beats and shift indices
+            updatedTracks =
+                map
+                    ( \track ->
+                        let beats' = Map.delete (MeasureIndex curM) (trackBeats track)
+                            shifted = Map.mapKeys (\(MeasureIndex k) -> if k > curM then MeasureIndex (k - 1) else MeasureIndex k) beats'
+                         in track{trackBeats = shifted}
+                    )
+                    (songTracks song)
+            newSong = song{songMeasures = reindexed, songTracks = updatedTracks}
+            -- Adjust cursor if past end
+            newM = min curM (length reindexed - 1)
+         in (withUndo (const newSong) st){asCurrentMeasure = MeasureIndex newM, asCurrentBeat = BeatIndex 0}
+
+-- Subdivide / Combine
+
+subdivideBeat :: Int -> AppState -> AppState
+subdivideBeat n st
+    | n < 2 = st
+    | otherwise =
+        let editSong =
+                modifyTrack (asCurrentTrack st) $
+                    modifyBeats (asCurrentMeasure st) $
+                        \beats ->
+                            let BeatIndex bIdx = asCurrentBeat st
+                                padded = ensureLength (bIdx + 1) beats
+                                (before, rest) = splitAt bIdx padded
+                             in case rest of
+                                    (beat : after) ->
+                                        let subDur = subdivideDuration n (beatDuration beat)
+                                            subBeats = replicate n beat{beatDuration = subDur}
+                                         in before ++ subBeats ++ after
+                                    [] -> padded
+         in withUndo editSong st
+
+subdivideDuration :: Int -> Duration -> Duration
+subdivideDuration 2 Whole = Half
+subdivideDuration 2 Half = Quarter
+subdivideDuration 2 Quarter = Eighth
+subdivideDuration 2 Eighth = Sixteenth
+subdivideDuration 2 Sixteenth = Thirty2nd
+subdivideDuration 2 _ = Thirty2nd -- can't subdivide further
+subdivideDuration 3 d = Triplet (subdivideDuration 2 d) -- triplets use the half-value wrapped
+subdivideDuration 4 d = subdivideDuration 2 (subdivideDuration 2 d)
+subdivideDuration _ d = d
+
+combineBeats :: AppState -> AppState
+combineBeats st = case asSelectionStart st of
+    Nothing -> st{asMessage = Just "Select beats first (v)"}
+    Just (selMi, selBi) ->
+        let mi = asCurrentMeasure st
+         in if selMi /= mi
+                then st{asMessage = Just "Selection must be within one measure"}
+                else
+                    let BeatIndex startB = min selBi (asCurrentBeat st)
+                        BeatIndex endB = max selBi (asCurrentBeat st)
+                        editSong =
+                            modifyTrack (asCurrentTrack st) $
+                                modifyBeats mi $
+                                    \beats ->
+                                        let padded = ensureLength (endB + 1) beats
+                                            (before, rest) = splitAt startB padded
+                                            (selected, after) = splitAt (endB - startB + 1) rest
+                                            combinedNotes = concatMap beatNotes selected
+                                            combinedDur = foldl1 addDurations (map beatDuration selected)
+                                            combined =
+                                                Beat
+                                                    { beatDuration = combinedDur
+                                                    , beatNotes = combinedNotes
+                                                    , beatIsRest = null combinedNotes
+                                                    }
+                                         in before ++ [combined] ++ after
+                     in (withUndo editSong st)
+                            { asCurrentBeat = BeatIndex startB
+                            , asInputMode = NormalMode
+                            , asSelectionStart = Nothing
+                            , asMessage = Just "Combined"
+                            }
+
+-- | Approximate duration addition — returns the closest standard duration.
+addDurations :: Duration -> Duration -> Duration
+addDurations a b =
+    let total = durationValue a + durationValue b
+     in fromDurationValue total
+
+durationValue :: Duration -> Int
+durationValue Whole = 16
+durationValue Half = 8
+durationValue Quarter = 4
+durationValue Eighth = 2
+durationValue Sixteenth = 1
+durationValue Thirty2nd = 1 -- approximate
+durationValue (Dotted d) = durationValue d + durationValue d `div` 2
+durationValue (Triplet d) = durationValue d * 2 `div` 3
+
+fromDurationValue :: Int -> Duration
+fromDurationValue v
+    | v >= 16 = Whole
+    | v >= 8 = Half
+    | v >= 4 = Quarter
+    | v >= 2 = Eighth
+    | otherwise = Sixteenth

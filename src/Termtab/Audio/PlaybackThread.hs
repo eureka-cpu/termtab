@@ -97,6 +97,32 @@ tickThread env song (MeasureIndex startMi) =
     tracks = songTracks song
     totalMeasures = length measures
 
+    -- Compute total playable beats: actual beats + empty slots from remaining duration
+    playableBeatCount :: Measure -> MeasureIndex -> Int
+    playableBeatCount measure mi =
+        let TimeSignature num _ = timeSignature measure
+            getBeats t = maybe [] id (Map.lookup mi (trackBeats t))
+            -- Use the longest beat list among all tracks
+            maxActual = maximum (num : map (length . getBeats) tracks)
+            longestBeats = case filter (\t -> length (getBeats t) == maxActual) tracks of
+                (t : _) -> getBeats t
+                [] -> []
+            usedUnits = sum (map (beatDurWeight . beatDuration) longestBeats)
+            totalUnits = num * 4
+            remainingUnits = max 0 (totalUnits - usedUnits)
+            emptySlots = remainingUnits `div` 4
+         in maxActual + emptySlots
+
+    beatDurWeight :: Duration -> Int
+    beatDurWeight Whole = 16
+    beatDurWeight Half = 8
+    beatDurWeight Quarter = 4
+    beatDurWeight Eighth = 2
+    beatDurWeight Sixteenth = 1
+    beatDurWeight Thirty2nd = 1
+    beatDurWeight (Dotted d) = beatDurWeight d + beatDurWeight d `div` 2
+    beatDurWeight (Triplet d) = beatDurWeight d * 2 `div` 3
+
     go :: Tempo -> Int -> IO ()
     go _tempo mi
         | mi >= totalMeasures = do
@@ -108,8 +134,8 @@ tickThread env song (MeasureIndex startMi) =
     go tempo mi = do
         let measure = measures !! mi
             currentTempo = maybe tempo id (tempoChange measure)
-            TimeSignature numBeats _ = timeSignature measure
-        completed <- playMeasureBeats currentTempo (MeasureIndex mi) 0 numBeats
+            totalBeats = playableBeatCount measure (MeasureIndex mi)
+        completed <- playMeasureBeats currentTempo (MeasureIndex mi) 0 totalBeats
         if completed
             then go currentTempo (mi + 1)
             else return ()

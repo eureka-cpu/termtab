@@ -1,4 +1,4 @@
-module Termtab.Defaults (defaultSong) where
+module Termtab.Defaults (defaultSong, defaultMeasureBeats) where
 
 import Data.Map.Strict qualified as Map
 
@@ -26,6 +26,11 @@ defaultTrack =
         , trackChannel = MidiChannel 0
         , trackBeats = Map.empty
         }
+
+-- | Generate the initial beat list for a time signature (all quarter rests).
+defaultMeasureBeats :: TimeSignature -> [Beat]
+defaultMeasureBeats (TimeSignature num _) =
+    replicate num Beat{beatDuration = Quarter, beatNotes = [], beatIsRest = True}
 
 defaultMeasure :: Measure
 defaultMeasure =

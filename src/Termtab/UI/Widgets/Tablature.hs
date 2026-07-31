@@ -1,4 +1,4 @@
-module Termtab.UI.Widgets.Tablature (renderTablature, cursorAttr, playheadAttr, barLineAttr, stringLabelAttr) where
+module Termtab.UI.Widgets.Tablature (renderTablature, cursorAttr, playheadAttr, selectionAttr, barLineAttr, stringLabelAttr) where
 
 import Brick hiding (zoom)
 import Data.Map.Strict qualified as Map
@@ -11,6 +11,9 @@ cursorAttr = attrName "cursor"
 
 playheadAttr :: AttrName
 playheadAttr = attrName "playhead"
+
+selectionAttr :: AttrName
+selectionAttr = attrName "selection"
 
 barLineAttr :: AttrName
 barLineAttr = attrName "barLine"
@@ -29,9 +32,14 @@ renderTablature st tIdx = Widget Greedy Fixed $ do
         contentWidth = w - labelWidth
         measures = songMeasures (asSong st)
         zoom = asZoom st
-        -- Determine visible measures starting from current
-        MeasureIndex startM = asCurrentMeasure st
-        visibleMeasures = fitMeasures measures zoom contentWidth startM
+        -- Try to show from measure 0; scroll only if cursor isn't visible
+        MeasureIndex cursorM = asCurrentMeasure st
+        allFromZero = fitMeasures track measures zoom contentWidth 0
+        cursorVisible = any (\(MeasureIndex mi, _, _) -> mi == cursorM) allFromZero
+        visibleMeasures =
+            if cursorVisible
+                then allFromZero
+                else fitMeasures track measures zoom contentWidth cursorM
         isFocused = tIdx == asCurrentTrack st
     render $
         vBox
@@ -63,26 +71,45 @@ pitchLabel (Pitch p) =
     let noteNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
      in noteNames !! (p `mod` 12)
 
--- | How many beats does this measure have based on its time signature numerator
-measureBeatCount :: [Measure] -> MeasureIndex -> Int
-measureBeatCount measures (MeasureIndex mi) =
-    case drop mi measures of
-        (m : _) -> let TimeSignature num _ = timeSignature m in num
-        [] -> 4
+{- | Column width for a beat based on its duration relative to a quarter note.
+At zoom level 4: quarter=4, eighth=2, sixteenth=1, half=8, whole=16, etc.
+-}
+beatColumnWidth :: Int -> Duration -> Int
+beatColumnWidth zoom dur = max 1 (zoom * durationWeight dur `div` 4)
 
--- | Determine which measures fit in the available width
-fitMeasures :: [Measure] -> Int -> Int -> Int -> [(MeasureIndex, Int)]
-fitMeasures measures zoom availW startM = go startM availW
+-- Quarter note = 4 units (the reference). Other durations scale from there.
+durationWeight :: Duration -> Int
+durationWeight Whole = 16
+durationWeight Half = 8
+durationWeight Quarter = 4
+durationWeight Eighth = 2
+durationWeight Sixteenth = 1
+durationWeight Thirty2nd = 1
+durationWeight (Dotted d) = durationWeight d + durationWeight d `div` 2
+durationWeight (Triplet d) = durationWeight d * 2 `div` 3
+
+-- | Fixed measure width from time signature. A 4/4 measure is always 4*zoom columns.
+measureWidthFromTimeSig :: Int -> Measure -> Int
+measureWidthFromTimeSig zoom m =
+    let TimeSignature num _ = timeSignature m
+     in num * zoom + 1 -- +1 for bar line
+
+{- | Determine which measures fit in the available width.
+Measure width is fixed by time signature; individual beat widths are proportional.
+-}
+fitMeasures :: Track -> [Measure] -> Int -> Int -> Int -> [(MeasureIndex, [Beat], Measure)]
+fitMeasures track measures zoom availW startM = go startM availW
   where
     totalM = length measures
     go mi remaining
         | mi >= totalM = []
         | otherwise =
-            let nBeats = measureBeatCount measures (MeasureIndex mi)
-                mWidth = nBeats * zoom + 1 -- +1 for bar line
+            let measure = measures !! mi
+                beats = beatsForTrackMeasure track (MeasureIndex mi)
+                mWidth = measureWidthFromTimeSig zoom measure
              in if mWidth > remaining && mi > startM
                     then []
-                    else (MeasureIndex mi, nBeats) : go (mi + 1) (remaining - mWidth)
+                    else (MeasureIndex mi, beats, measure) : go (mi + 1) (remaining - mWidth)
 
 renderStringLine ::
     AppState ->
@@ -92,14 +119,14 @@ renderStringLine ::
     [String] ->
     Int ->
     Int ->
-    [(MeasureIndex, Int)] ->
+    [(MeasureIndex, [Beat], Measure)] ->
     StringIndex ->
     Widget ResourceName
-renderStringLine st tIdx track isFocused labels labelWidth zoom visibleMeasures sIdx =
+renderStringLine st _tIdx _track isFocused labels labelWidth zoom visibleMeasures sIdx =
     hBox $
         [ withAttr stringLabelAttr $ str (padLabel labelWidth (getLabel labels sIdx) ++ "|")
         ]
-            ++ concatMap (renderMeasureOnString st tIdx track isFocused zoom sIdx) visibleMeasures
+            ++ concatMap (renderMeasureOnString st isFocused zoom sIdx) visibleMeasures
 
 padLabel :: Int -> String -> String
 padLabel w s =
@@ -113,25 +140,56 @@ getLabel labels (StringIndex si)
 
 renderMeasureOnString ::
     AppState ->
-    TrackIndex ->
-    Track ->
     Bool ->
     Int ->
     StringIndex ->
-    (MeasureIndex, Int) ->
+    (MeasureIndex, [Beat], Measure) ->
     [Widget ResourceName]
-renderMeasureOnString st tIdx track isFocused zoom sIdx (mi, nBeats) =
-    let beats = beatsForTrackMeasure track mi
+renderMeasureOnString st isFocused zoom sIdx (mi, beats, measure) =
+    let TimeSignature num _ = timeSignature measure
+        -- Total columns for the measure (from time signature)
+        totalCols = num * zoom
+        -- Columns used by actual beats
+        usedCols = sum (map (beatColumnWidth zoom . beatDuration) beats)
+        -- Remaining columns filled with quarter-note-width empty slots
+        remainingCols = max 0 (totalCols - usedCols)
+        emptySlotWidth = zoom -- each empty slot is quarter-note width
+        emptySlotCount = if emptySlotWidth > 0 then remainingCols `div` emptySlotWidth else 0
+        -- Render actual beats
         beatWidgets =
-            [ renderBeatCell st tIdx isFocused zoom sIdx mi (BeatIndex bi) beats
-            | bi <- [0 .. nBeats - 1]
+            [ renderBeatCell st isFocused zoom sIdx mi (BeatIndex bi) beats
+            | bi <- [0 .. length beats - 1]
+            ]
+        -- Render empty beat slots
+        emptyWidgets =
+            [ renderEmptyCell st isFocused sIdx mi (BeatIndex bi) emptySlotWidth
+            | bi <- [length beats .. length beats + emptySlotCount - 1]
             ]
         barLine = withAttr barLineAttr (str "|")
-     in beatWidgets ++ [barLine]
+     in beatWidgets ++ emptyWidgets ++ [barLine]
+
+renderEmptyCell ::
+    AppState ->
+    Bool ->
+    StringIndex ->
+    MeasureIndex ->
+    BeatIndex ->
+    Int ->
+    Widget ResourceName
+renderEmptyCell st isFocused sIdx mi bi colWidth =
+    let cell = replicate (max 1 colWidth) '-'
+        isCursor =
+            isFocused
+                && mi == asCurrentMeasure st
+                && bi == asCurrentBeat st
+                && sIdx == asCurrentString st
+        attr
+            | isCursor = cursorAttr
+            | otherwise = mempty
+     in withAttr attr (str cell)
 
 renderBeatCell ::
     AppState ->
-    TrackIndex ->
     Bool ->
     Int ->
     StringIndex ->
@@ -139,14 +197,20 @@ renderBeatCell ::
     BeatIndex ->
     [Beat] ->
     Widget ResourceName
-renderBeatCell st _tIdx isFocused zoom sIdx mi bi beats =
+renderBeatCell st isFocused zoom sIdx mi bi beats =
     let BeatIndex bIdx = bi
-        fretText = case drop bIdx beats of
-            (beat : _) -> fretOnString sIdx beat
+        mBeat = case drop bIdx beats of
+            (beat : _) -> Just beat
             [] -> Nothing
+        colWidth = case mBeat of
+            Just beat -> beatColumnWidth zoom (beatDuration beat)
+            Nothing -> zoom
+        fretText = case mBeat of
+            Just beat -> fretOnString sIdx beat
+            Nothing -> Nothing
         cell = case fretText of
-            Just f -> padCell zoom (show f)
-            Nothing -> replicate zoom '-'
+            Just f -> padCell colWidth (show f)
+            Nothing -> replicate colWidth '-'
         isCursor =
             isFocused
                 && mi == asCurrentMeasure st
@@ -155,8 +219,18 @@ renderBeatCell st _tIdx isFocused zoom sIdx mi bi beats =
         isPlayhead =
             asPlayheadMeasure st == Just mi
                 && asPlayheadBeat st == Just bi
+        isSelected = case asSelectionStart st of
+            Just (selMi, selBi) ->
+                mi == selMi
+                    && mi == asCurrentMeasure st
+                    && let BeatIndex s = min selBi (asCurrentBeat st)
+                           BeatIndex e = max selBi (asCurrentBeat st)
+                           BeatIndex b = bi
+                        in b >= s && b <= e
+            Nothing -> False
         attr
             | isCursor = cursorAttr
+            | isSelected = selectionAttr
             | isPlayhead = playheadAttr
             | otherwise = mempty
      in withAttr attr (str cell)

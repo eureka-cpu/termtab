@@ -10,7 +10,7 @@ import Termtab.Types (Song (..), TrackIndex (..))
 import Termtab.UI.Keybindings (handleEvent)
 import Termtab.UI.Types
 import Termtab.UI.Widgets.StatusBar (commandModeAttr, renderStatusBar, statusBarAttr)
-import Termtab.UI.Widgets.Tablature (barLineAttr, cursorAttr, playheadAttr, stringLabelAttr)
+import Termtab.UI.Widgets.Tablature (barLineAttr, cursorAttr, playheadAttr, selectionAttr, stringLabelAttr)
 import Termtab.UI.Widgets.TrackPanel (focusedTrackAttr, renderTrackPanel)
 
 app :: App AppState AppEvent ResourceName
@@ -38,6 +38,7 @@ theAttrMap =
         V.defAttr
         [ (cursorAttr, V.defAttr `V.withStyle` V.reverseVideo)
         , (playheadAttr, V.defAttr `V.withBackColor` V.green `V.withForeColor` V.black)
+        , (selectionAttr, V.defAttr `V.withBackColor` V.blue `V.withForeColor` V.white)
         , (barLineAttr, V.defAttr `V.withForeColor` V.brightBlack)
         , (stringLabelAttr, V.defAttr `V.withForeColor` V.cyan)
         , (focusedTrackAttr, V.defAttr `V.withStyle` V.bold)

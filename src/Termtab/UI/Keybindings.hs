@@ -2,18 +2,21 @@ module Termtab.UI.Keybindings (handleEvent) where
 
 import Brick
 import Brick.BChan (BChan, writeBChan)
+import Control.Concurrent (forkIO, threadDelay)
 import Control.Concurrent.STM (readTVarIO)
 import Control.Exception (SomeException, catch)
+import Control.Monad (void)
 import Control.Monad.IO.Class (liftIO)
 import Data.Char (digitToInt, isDigit)
 import Graphics.Vty qualified as V
 import System.Environment (lookupEnv)
 import System.FilePath (replaceExtension)
 
+import Termtab.Audio (engineNoteOff, engineNoteOn)
 import Termtab.Audio.PlaybackThread
 import Termtab.Audio.Types (AudioConfig (..), PlaybackStatus (..))
 import Termtab.Export.MIDI (exportMidi)
-import Termtab.Types (Song)
+import Termtab.Types (Beat (..), BeatIndex (..), Measure (..), MeasureIndex (..), Note (..), Song (..), TimeSignature (..), Track (..))
 import Termtab.UI.Editing
 import Termtab.UI.Types
 
@@ -23,6 +26,8 @@ handleEvent (VtyEvent (V.EvKey key mods)) = do
     case mode of
         NormalMode -> handleNormal key mods
         GoToMode -> handleGoTo key
+        VisualMode -> handleVisual key
+        MenuMode path -> handleMenu path key
         CommandMode buf -> handleCommand key buf
 handleEvent (AppEvent PlaybackTick) = handlePlaybackTick
 handleEvent _ = return ()
@@ -52,19 +57,28 @@ handleNormal key mods = case key of
     V.KEsc -> handleEsc
     V.KChar ':' -> modify $ clearFretEntry . \st -> st{asInputMode = CommandMode "", asMessage = Nothing}
     -- Navigation (clears fret entry)
-    V.KChar 'h' -> modify $ clearFretEntry . clearMessage . moveBeatLeft
-    V.KChar 'l' | V.MCtrl `notElem` mods -> modify $ clearFretEntry . clearMessage . moveBeatRight
+    V.KChar 'h' -> handleMoveLeft
+    V.KChar 'l' | V.MCtrl `notElem` mods -> handleMoveRight
     V.KChar 'k' -> modify $ clearFretEntry . clearMessage . moveStringDown
     V.KChar 'j' -> modify $ clearFretEntry . clearMessage . moveStringUp
-    V.KChar 'W' -> modify $ clearFretEntry . clearMessage . moveMeasureForward
-    V.KChar 'B' -> modify $ clearFretEntry . clearMessage . moveMeasureBack
+    V.KChar 'W' -> handleMoveForward
+    V.KChar 'B' -> handleMoveBack
     V.KChar 'g' -> modify $ clearFretEntry . \st -> st{asInputMode = GoToMode, asMessage = Just "g-"}
+    -- Visual mode
+    V.KChar 'v' ->
+        modify $
+            clearFretEntry . \st ->
+                st{asInputMode = VisualMode, asSelectionStart = Just (asCurrentMeasure st, asCurrentBeat st), asMessage = Just "-- VISUAL --"}
+    -- Space menu
+    V.KChar ' ' -> modify $ clearFretEntry . \st -> st{asInputMode = MenuMode [], asMessage = Just "s:subdivide  c:combine  n:note  m:measure"}
     -- Display
     V.KChar 't' -> modify $ clearFretEntry . clearMessage . cycleDisplayMode
     V.KChar '+' -> modify $ clearFretEntry . clearMessage . zoomIn
     V.KChar '-' -> modify $ clearFretEntry . clearMessage . zoomOut
     -- Editing: fret entry
-    V.KChar c | isDigit c -> modify $ clearMessage . enterFretDigit (digitToInt c)
+    V.KChar c | isDigit c -> do
+        modify $ clearMessage . enterFretDigit (digitToInt c)
+        previewNote
     -- Editing: delete
     V.KChar 'd' -> modify $ clearFretEntry . clearMessage . deleteNoteAtCursor
     V.KBS -> modify $ clearFretEntry . clearMessage . deleteNoteAtCursor
@@ -97,6 +111,87 @@ handleEsc = do
                     , asMessage = Just "Stopped"
                     }
         _ -> return ()
+
+handleMoveRight :: EventM ResourceName AppState ()
+handleMoveRight = do
+    st <- get
+    if atLastBeat st && atLastMeasure st
+        then modify $ clearFretEntry . clearMessage . moveMeasureForward . addMeasure
+        else modify $ clearFretEntry . clearMessage . moveBeatRight
+
+handleMoveLeft :: EventM ResourceName AppState ()
+handleMoveLeft = do
+    st <- get
+    let curMi = asCurrentMeasure st
+    if atFirstBeat st && not (atFirstMeasure st) && isMeasureEmpty curMi st && measureCount st > 1
+        then -- Leaving an empty measure: delete it and go to last beat of previous measure
+            modify $ clearFretEntry . clearMessage . deleteAndGoToPrevLastBeat
+        else modify $ clearFretEntry . clearMessage . moveBeatLeft
+
+handleMoveBack :: EventM ResourceName AppState ()
+handleMoveBack = do
+    st <- get
+    let curMi = asCurrentMeasure st
+    if not (atFirstMeasure st) && isMeasureEmpty curMi st && measureCount st > 1
+        then -- Delete empty measure and go to last beat of previous measure
+            modify $ clearFretEntry . clearMessage . deleteAndGoToPrevLastBeat
+        else modify $ clearFretEntry . clearMessage . moveMeasureBack
+
+-- | Delete the current empty measure and move cursor to the last beat of the previous measure.
+deleteAndGoToPrevLastBeat :: AppState -> AppState
+deleteAndGoToPrevLastBeat st =
+    let MeasureIndex curM = asCurrentMeasure st
+        prevM = max 0 (curM - 1)
+        -- Compute last beat of previous measure BEFORE deletion
+        prevSt = st{asCurrentMeasure = MeasureIndex prevM}
+        prevBeatCount = currentMeasureBeatCount prevSt
+        deleted = deleteMeasure st
+     in deleted{asCurrentMeasure = MeasureIndex prevM, asCurrentBeat = BeatIndex (prevBeatCount - 1)}
+
+handleMoveForward :: EventM ResourceName AppState ()
+handleMoveForward = do
+    st <- get
+    if atLastMeasure st
+        then modify $ clearFretEntry . clearMessage . moveMeasureForward . addMeasure
+        else modify $ clearFretEntry . clearMessage . moveMeasureForward
+
+handleVisual :: V.Key -> EventM ResourceName AppState ()
+handleVisual key = case key of
+    V.KEsc -> modify $ clearMessage . backToNormal . \st -> st{asSelectionStart = Nothing}
+    V.KChar 'h' -> modify $ clearMessage . moveBeatLeft
+    V.KChar 'l' -> modify $ clearMessage . moveBeatRight
+    V.KChar ' ' -> modify $ \st -> st{asInputMode = MenuMode [], asMessage = Just "s:subdivide  c:combine  n:note  m:measure"}
+    _ -> return ()
+
+handleMenu :: [String] -> V.Key -> EventM ResourceName AppState ()
+handleMenu [] key = case key of
+    -- Root menu
+    V.KChar 's' -> modify $ \st -> st{asInputMode = MenuMode ["s"], asMessage = Just "2:halves  3:triplets  4:quadruplets"}
+    V.KChar 'c' -> modify $ clearMessage . combineBeats . backToNormal
+    V.KChar 'n' -> modify $ \st -> st{asInputMode = MenuMode ["n"], asMessage = Just "b:bend  s:slide  h:hammer-on  p:pull-off  v:vibrato  m:palm mute (stubs)"}
+    V.KChar 'm' -> modify $ \st -> st{asInputMode = MenuMode ["m"], asMessage = Just "a:add measure  d:delete measure"}
+    V.KEsc -> modify $ clearMessage . backToNormal
+    _ -> modify $ backToNormal . setMessage "Unknown menu option"
+handleMenu ["s"] key = case key of
+    -- Subdivide submenu
+    V.KChar '2' -> modify $ clearMessage . backToNormal . subdivideBeat 2
+    V.KChar '3' -> modify $ clearMessage . backToNormal . subdivideBeat 3
+    V.KChar '4' -> modify $ clearMessage . backToNormal . subdivideBeat 4
+    V.KEsc -> modify $ \st -> st{asInputMode = MenuMode [], asMessage = Just "s:subdivide  c:combine  n:note  m:measure"}
+    _ -> modify $ backToNormal . setMessage "Unknown subdivision"
+handleMenu ["n"] key = case key of
+    -- Note effects submenu (stubs)
+    V.KEsc -> modify $ \st -> st{asInputMode = MenuMode [], asMessage = Just "s:subdivide  c:combine  n:note  m:measure"}
+    _ -> modify $ backToNormal . setMessage "Not yet implemented"
+handleMenu ["m"] key = case key of
+    -- Measure submenu
+    V.KChar 'a' -> modify $ clearMessage . backToNormal . addMeasure
+    V.KChar 'd' -> modify $ clearMessage . backToNormal . deleteMeasure
+    V.KEsc -> modify $ \st -> st{asInputMode = MenuMode [], asMessage = Just "s:subdivide  c:combine  n:note  m:measure"}
+    _ -> modify $ backToNormal . setMessage "Unknown measure operation"
+handleMenu _ key = case key of
+    V.KEsc -> modify $ clearMessage . backToNormal
+    _ -> modify $ backToNormal . setMessage "Unknown menu option"
 
 handleGoTo :: V.Key -> EventM ResourceName AppState ()
 handleGoTo key = case key of
@@ -187,6 +282,36 @@ tryInitPlayback bChan = do
                 notify = writeBChan bChan PlaybackTick
             (Just <$> initPlaybackEnv cfg notify)
                 `catch` \(_ :: SomeException) -> return Nothing
+
+-- | Play the note at the current cursor position briefly (fire-and-forget).
+previewNote :: EventM ResourceName AppState ()
+previewNote = do
+    st <- get
+    mEnv <- case asPlaybackEnv st of
+        Just env -> return (Just env)
+        Nothing -> do
+            let bChan = asBChan st
+            env <- liftIO $ tryInitPlayback bChan
+            case env of
+                Just e -> modify (\s -> s{asPlaybackEnv = Just e}) >> return (Just e)
+                Nothing -> return Nothing
+    case mEnv of
+        Nothing -> return ()
+        Just env -> case currentTrack st of
+            Nothing -> return ()
+            Just track ->
+                let beats = beatsForTrackMeasure track (asCurrentMeasure st)
+                    BeatIndex bIdx = asCurrentBeat st
+                 in case drop bIdx beats of
+                        (beat : _) ->
+                            case filter (\n -> noteString n == Just (asCurrentString st)) (beatNotes beat) of
+                                (note : _) -> liftIO $ void $ forkIO $ do
+                                    let ch = trackChannel track
+                                    engineNoteOn (peAudioEngine env) ch (notePitch note) (noteVelocity note)
+                                    threadDelay 200000 -- 200ms preview
+                                    engineNoteOff (peAudioEngine env) ch (notePitch note)
+                                _ -> return ()
+                        _ -> return ()
 
 backToNormal :: AppState -> AppState
 backToNormal st = st{asInputMode = NormalMode}
