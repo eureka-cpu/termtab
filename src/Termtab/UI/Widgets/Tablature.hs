@@ -40,12 +40,8 @@ renderTablature st tIdx = Widget Greedy Fixed $ do
         measures = songMeasures (asSong st)
         zoom = asZoom st
         MeasureIndex cursorM = asCurrentMeasure st
-        allFromZero = fitMeasures track measures zoom contentWidth 0
-        cursorVisible = any (\(MeasureIndex mi, _, _) -> mi == cursorM) allFromZero
-        visibleMeasures =
-            if cursorVisible
-                then allFromZero
-                else fitMeasures track measures zoom contentWidth cursorM
+        -- Find the best starting measure: latest start that still includes the cursor
+        visibleMeasures = findVisibleRange track measures zoom contentWidth cursorM
         isFocused = tIdx == asCurrentTrack st
         labels = tabLabels nStrings
     render $
@@ -114,6 +110,23 @@ measureWidthFromTimeSig :: Int -> Measure -> Int
 measureWidthFromTimeSig zoom m =
     let TimeSignature num _ = timeSignature m
      in num * zoom + 1
+
+{- | Find the best visible range: start as early as possible while
+ensuring the cursor measure is visible and the width is filled.
+-}
+findVisibleRange :: Track -> [Measure] -> Int -> Int -> Int -> [(MeasureIndex, [Beat], Measure)]
+findVisibleRange track measures zoom availW cursorM =
+    -- Try each possible start from 0 to cursorM, pick the latest one
+    -- that still includes the cursor measure
+    let candidates =
+            [ (startM, fitted)
+            | startM <- [0 .. cursorM]
+            , let fitted = fitMeasures track measures zoom availW startM
+            , any (\(MeasureIndex mi, _, _) -> mi == cursorM) fitted
+            ]
+     in case candidates of
+            [] -> fitMeasures track measures zoom availW cursorM
+            ((_, fitted) : _) -> fitted
 
 fitMeasures :: Track -> [Measure] -> Int -> Int -> Int -> [(MeasureIndex, [Beat], Measure)]
 fitMeasures track measures zoom availW startM = go startM availW

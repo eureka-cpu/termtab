@@ -123,8 +123,8 @@ handleMoveLeft :: EventM ResourceName AppState ()
 handleMoveLeft = do
     st <- get
     let curMi = asCurrentMeasure st
-    if atFirstBeat st && not (atFirstMeasure st) && isMeasureEmpty curMi st && measureCount st > 1
-        then -- Leaving an empty measure: delete it and go to last beat of previous measure
+    if atFirstBeat st && not (atFirstMeasure st) && isTrailingEmpty curMi st && measureCount st > 1
+        then -- Leaving a trailing empty measure: delete it and go to last beat of previous measure
             modify $ clearFretEntry . clearMessage . deleteAndGoToPrevLastBeat
         else modify $ clearFretEntry . clearMessage . moveBeatLeft
 
@@ -132,8 +132,8 @@ handleMoveBack :: EventM ResourceName AppState ()
 handleMoveBack = do
     st <- get
     let curMi = asCurrentMeasure st
-    if not (atFirstMeasure st) && isMeasureEmpty curMi st && measureCount st > 1
-        then -- Delete empty measure and go to last beat of previous measure
+    if not (atFirstMeasure st) && isTrailingEmpty curMi st && measureCount st > 1
+        then -- Delete trailing empty measure and go to last beat of previous measure
             modify $ clearFretEntry . clearMessage . deleteAndGoToPrevLastBeat
         else modify $ clearFretEntry . clearMessage . moveMeasureBack
 

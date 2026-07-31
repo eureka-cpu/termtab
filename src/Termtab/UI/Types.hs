@@ -30,6 +30,7 @@ module Termtab.UI.Types (
     atFirstBeat,
     atFirstMeasure,
     isMeasureEmpty,
+    isTrailingEmpty,
     beatsForTrackMeasure,
     stringCountForTrack,
     measureCount,
@@ -159,6 +160,14 @@ isMeasureEmpty mi st =
         let beats = beatsForTrackMeasure track mi
          in all beatEmpty beats
     beatEmpty beat = null (beatNotes beat)
+
+{- | A measure is trailing-empty if it and all measures after it are empty.
+Only trailing-empty measures should be auto-deleted on backward navigation.
+-}
+isTrailingEmpty :: MeasureIndex -> AppState -> Bool
+isTrailingEmpty (MeasureIndex mi) st =
+    let total = measureCount st
+     in all (\i -> isMeasureEmpty (MeasureIndex i) st) [mi .. total - 1]
 
 -- Navigation
 
