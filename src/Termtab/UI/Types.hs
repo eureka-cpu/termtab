@@ -37,9 +37,13 @@ module Termtab.UI.Types (
 ) where
 
 import Brick.BChan (BChan)
+import Codec.Picture (PixelRGBA8)
 import Data.Map.Strict qualified as Map
 import Termtab.Audio.PlaybackThread (PlaybackEnv)
 import Termtab.Audio.Types (PlaybackStatus (..))
+import Termtab.Graphics.Detect (GraphicsProtocol (..))
+import Termtab.Graphics.Font (GlyphFont)
+import Termtab.Graphics.TermColor (defaultInk)
 import Termtab.Types
 
 data DisplayMode
@@ -60,10 +64,14 @@ data ResourceName
     = TrackViewport TrackIndex
     | StatusBarResource
     | CommandLineResource
+    | -- Reserved region a track's notation image is blitted over.
+      NotationRegion TrackIndex
     deriving (Show, Eq, Ord)
 
 data AppEvent
     = PlaybackTick
+    | -- Posted at startup so the notation images are placed once extents exist.
+      GraphicsRefresh
     deriving (Show, Eq)
 
 data AppState = AppState
@@ -86,6 +94,14 @@ data AppState = AppState
     , asRedoStack :: [Song]
     , asFretEntry :: Maybe FretNumber
     , asSelectionStart :: Maybe (MeasureIndex, BeatIndex)
+    , -- Graphics notation (resolved once at startup):
+      asProtocol :: GraphicsProtocol
+    , asGlyphFont :: Maybe GlyphFont
+    , asInkColor :: PixelRGBA8
+    , -- Per-track signature of the last-blitted notation (position + width +
+      -- visible beats). Used to skip re-blitting when nothing changed, which
+      -- avoids flicker on in-place navigation.
+      asNotationSigs :: Map.Map TrackIndex String
     }
 
 initAppState :: Maybe FilePath -> Song -> BChan AppEvent -> AppState
@@ -110,6 +126,10 @@ initAppState mPath song bChan =
         , asRedoStack = []
         , asFretEntry = Nothing
         , asSelectionStart = Nothing
+        , asProtocol = TextOnly
+        , asGlyphFont = Nothing
+        , asInkColor = defaultInk
+        , asNotationSigs = Map.empty
         }
   where
     defaultModes =

@@ -5,6 +5,7 @@ import Data.Map.Strict qualified as Map
 import Data.Text qualified as T
 
 import Termtab.Types
+import Termtab.UI.NotationGraphics (graphicsNotationActive, notationRegionWidget)
 import Termtab.UI.Types
 import Termtab.UI.Widgets.Notation (renderNotation)
 import Termtab.UI.Widgets.Tablature (renderTablature)
@@ -25,12 +26,17 @@ renderTrackPanel st tIdx track =
         effectiveMode = case trackInstrument track of
             Standard _ -> NotationOnly
             _ -> mode
+        -- Prefer the rasterized Bravura image (Kitty): reserve a blank region the
+        -- image is blitted over; otherwise fall back to the Unicode text staff.
+        notation
+            | graphicsNotationActive st = notationRegionWidget tIdx
+            | otherwise = renderNotation st tIdx
         content = case effectiveMode of
             TabOnly -> renderTablature st tIdx
-            NotationOnly -> renderNotation st tIdx
+            NotationOnly -> notation
             TabAndNotation ->
                 vBox
-                    [ renderNotation st tIdx
+                    [ notation
                     , renderTablature st tIdx
                     ]
      in vBox [header, content]

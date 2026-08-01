@@ -9,10 +9,8 @@ let
       root = ./.;
       src = lib.cleanSourceWith {
         src = lib.cleanSource root;
-        filter =
-          path: _type:
-          # Avoid rebuilds when changing nix files
-            !lib.hasSuffix ".nix" path;
+        filter = path: _type:
+          !lib.hasSuffix ".nix" path; # Avoid rebuilds when changing nix files
       };
     in
     {
@@ -27,6 +25,7 @@ let
       };
     };
 
+  # TODO: Is this still necessary?
   # Bravura ships under a lilypond-version-dependent subpath; pin the .otf to a
   # stable store path so the build/runtime never hardcodes the lilypond version.
   bravuraOtf = pkgs.runCommand "bravura-otf" { } ''
@@ -50,9 +49,7 @@ let
     treefmt-check =
       let
         treefmt =
-          let
-            treefmt = import sources.treefmt;
-          in
+          let treefmt = import sources.treefmt; in
           treefmt.evalModule pkgs workspace.formattingOptions;
       in
       treefmt.config.build.check workspace.src;

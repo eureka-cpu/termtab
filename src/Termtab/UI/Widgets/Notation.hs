@@ -3,6 +3,7 @@ module Termtab.UI.Widgets.Notation (renderNotation) where
 import Brick hiding (zoom)
 import Data.Map.Strict qualified as Map
 
+import Termtab.Notation.Staff (isStaffLine, noteheadGlyph, pitchToStaffPos)
 import Termtab.Types
 import Termtab.UI.Types
 import Termtab.UI.Widgets.Tablature (beatColumnWidth, findVisibleRange)
@@ -26,15 +27,12 @@ renderNotation st tIdx =
                 ++ [renderStaffRow zoom instr visibleMeasures 9 False]
                 -- Staff: top line (F5) down to bottom line (E4)
                 -- Alternating: line, space, line, space, ...
-                ++ [ renderStaffRow zoom instr visibleMeasures pos (isLine pos)
+                ++ [ renderStaffRow zoom instr visibleMeasures pos (isStaffLine pos)
                    | pos <- [8, 7, 6, 5, 4, 3, 2, 1, 0]
                    ]
                 -- Below staff (ledger lines / low notes)
                 ++ [renderStaffRow zoom instr visibleMeasures (-1) False]
                 ++ [renderStaffRow zoom instr visibleMeasures (-2) False]
-
-isLine :: Int -> Bool
-isLine pos = pos `elem` [0, 2, 4, 6, 8]
 
 getTrack :: TrackIndex -> Song -> Track
 getTrack (TrackIndex i) song =
@@ -88,49 +86,12 @@ renderBeatAtPos zoom instr staffPos fillChar (BeatIndex bIdx) beats =
                      in if null matching
                             then str (replicate colWidth fillChar)
                             else
-                                let nh = noteheadChar (beatDuration beat)
+                                let nh = noteheadGlyph (beatDuration beat)
                                  in str (placeGlyph colWidth fillChar nh)
-
--- | Notehead character based on duration.
-noteheadChar :: Duration -> Char
-noteheadChar Whole = '\xE0A2' -- SMuFL whole notehead
-noteheadChar Half = '\xE0A3' -- SMuFL half notehead
-noteheadChar (Dotted d) = noteheadChar d
-noteheadChar (Triplet d) = noteheadChar d
-noteheadChar _ = '\xE0A4' -- SMuFL filled (black) notehead
 
 noteOnStaffPos :: Instrument -> Int -> Note -> Bool
 noteOnStaffPos instr targetPos note =
     pitchToStaffPos instr (notePitch note) == targetPos
-
-{- | Convert MIDI pitch to staff position in treble clef.
-Guitar/bass transposed up one octave (standard convention).
-Position 0 = E4 (bottom line), 1 = F4, 2 = G4, ..., 8 = F5 (top line)
--}
-pitchToStaffPos :: Instrument -> Pitch -> Int
-pitchToStaffPos instr (Pitch midi) =
-    let transposed = case instr of
-            Guitar _ _ -> midi + 12
-            Bass _ _ -> midi + 12
-            Standard _ -> midi
-        octave = transposed `div` 12 - 1
-        noteInOctave = transposed `mod` 12
-        naturalPos = case noteInOctave of
-            0 -> 0
-            1 -> 0
-            2 -> 1
-            3 -> 1
-            4 -> 2
-            5 -> 3
-            6 -> 3
-            7 -> 4
-            8 -> 4
-            9 -> 5
-            10 -> 5
-            11 -> 6
-            _ -> 0
-        posFromC4 = (octave - 4) * 7 + naturalPos
-     in posFromC4 - 2
 
 -- | Place a glyph character centered in a cell.
 placeGlyph :: Int -> Char -> Char -> String

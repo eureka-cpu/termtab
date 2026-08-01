@@ -11,6 +11,7 @@ import System.IO (hPrint, hPutStrLn, stderr)
 import Termtab.Audio (AudioConfig (..), BackendType (..), withAudioEngine)
 import Termtab.Audio.Playback (playNote, playSequence)
 import Termtab.Defaults (defaultSong)
+import Termtab.Graphics.Demo (runNotationDemo, runPlaceholderDemo)
 import Termtab.Graphics.Health (runHealthCheck)
 import Termtab.Parser.Common (parseFile)
 import Termtab.Types
@@ -21,6 +22,8 @@ data Action
     | ActionPlayNote Int
     | ActionPlaySong
     | ActionHealth
+    | ActionNotationDemo
+    | ActionPlaceholderDemo
 
 data Options = Options
     { optFile :: Maybe FilePath
@@ -28,13 +31,26 @@ data Options = Options
     }
 
 actionParser :: Parser Action
-actionParser = playNoteP <|> playSongP <|> healthP <|> pure ActionDisplay
+actionParser =
+    playNoteP <|> playSongP <|> healthP <|> notationDemoP <|> placeholderDemoP <|> pure ActionDisplay
   where
     healthP =
         flag'
             ActionHealth
             ( long "health"
                 <> help "Report the detected terminal graphics protocol and Bravura font status, then exit"
+            )
+    notationDemoP =
+        flag'
+            ActionNotationDemo
+            ( long "notation-demo"
+                <> help "Render the default measure as a Kitty graphics image at the cursor, then exit"
+            )
+    placeholderDemoP =
+        flag'
+            ActionPlaceholderDemo
+            ( long "placeholder-demo"
+                <> help "Render the default measure via Kitty Unicode placeholder cells, then exit"
             )
     playNoteP =
         ActionPlayNote
@@ -96,6 +112,8 @@ main = do
     opts <- customExecParser (prefs showHelpOnEmpty) parserInfo
     case optAction opts of
         ActionHealth -> runHealthCheck
+        ActionNotationDemo -> runNotationDemo
+        ActionPlaceholderDemo -> runPlaceholderDemo
         _ -> runWithSong opts
 
 -- | Load the requested song (or the default scratch track) and dispatch.
@@ -110,6 +128,8 @@ runWithSong opts = do
                 Right s -> return s
     case optAction opts of
         ActionHealth -> return () -- handled in main
+        ActionNotationDemo -> return () -- handled in main
+        ActionPlaceholderDemo -> return () -- handled in main
         ActionDisplay ->
             runUI (optFile opts) song
         ActionPlayNote midiNote -> do

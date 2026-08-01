@@ -81,10 +81,17 @@ library
         Termtab.UI.Widgets.Notation
         Termtab.UI.Widgets.StatusBar
         Termtab.UI.Widgets.TrackPanel
+        Termtab.UI.NotationGraphics
         Termtab.Graphics.Detect
         Termtab.Graphics.Kitty
+        Termtab.Graphics.KittyPlacement
         Termtab.Graphics.FreeType
         Termtab.Graphics.Health
+        Termtab.Graphics.Font
+        Termtab.Graphics.Notation
+        Termtab.Graphics.TermColor
+        Termtab.Graphics.Demo
+        Termtab.Notation.Staff
     build-depends:
         base             ^>=4.20.2.0
       , text             ^>=2.1
@@ -136,6 +143,8 @@ test-suite termtab-test
         Termtab.Graphics.DetectSpec
         Termtab.Graphics.KittySpec
         Termtab.Graphics.FreeTypeSpec
+        Termtab.Graphics.NotationSpec
+        Termtab.Graphics.TermColorSpec
     build-depends:
         base        ^>=4.20.2.0
       , binary      ^>=0.8

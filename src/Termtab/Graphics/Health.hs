@@ -9,10 +9,13 @@ module Termtab.Graphics.Health (runHealthCheck) where
 
 import Codec.Picture (imageHeight, imageWidth)
 import Control.Exception (SomeException, try)
+import Data.Word (Word8)
+import Numeric (showHex)
 import System.Environment (lookupEnv)
 
 import Termtab.Graphics.Detect
 import Termtab.Graphics.FreeType
+import Termtab.Graphics.TermColor (queryForegroundColor)
 
 -- | Result of trying to load and rasterize a glyph from the Bravura font.
 data FontStatus
@@ -23,11 +26,12 @@ data FontStatus
 runHealthCheck :: IO ()
 runHealthCheck = do
     info <- detectProtocolInfo
+    fg <- queryForegroundColor
     font <- checkFont
-    mapM_ putStrLn (report info font)
+    mapM_ putStrLn (report info fg font)
 
-report :: DetectionInfo -> FontStatus -> [String]
-report info font =
+report :: DetectionInfo -> Maybe (Word8, Word8, Word8) -> FontStatus -> [String]
+report info fg font =
     [ "termtab health check"
     , "===================="
     , ""
@@ -38,6 +42,7 @@ report info font =
     , "  TERMTAB_GRAPHICS = " <> orUnset (diOverride info)
     , "  -> protocol: " <> showProtocol (diProtocol info)
     , "     reason:   " <> diReason info
+    , "  ink color (OSC 10 foreground): " <> maybe "(no reply — will use default ink)" fmtColor fg
     , ""
     , "Notation font (Bravura)"
     ]
@@ -110,3 +115,8 @@ showProtocol TextOnly = "Unicode text (no graphics)"
 
 orUnset :: Maybe String -> String
 orUnset = maybe "(unset)" id
+
+fmtColor :: (Word8, Word8, Word8) -> String
+fmtColor (r, g, b) = '#' : concatMap hex2 [r, g, b]
+  where
+    hex2 w = let s = showHex w "" in if length s < 2 then '0' : s else s
