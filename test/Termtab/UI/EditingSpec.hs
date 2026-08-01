@@ -5,7 +5,6 @@ import Data.Map.Strict qualified as Map
 import Test.Tasty
 import Test.Tasty.HUnit
 
-import Termtab.Defaults (defaultSong)
 import Termtab.Types
 import Termtab.UI.Editing
 import Termtab.UI.Types
@@ -15,12 +14,30 @@ mkState song = do
     bChan <- newBChan 1
     return $ initAppState Nothing song bChan
 
+-- A blank song with one empty measure (for editing tests)
+blankSong :: Song
+blankSong =
+    Song
+        { songTitle = "Test"
+        , songArtist = ""
+        , songTempo = Tempo 120
+        , songTracks =
+            [ Track
+                { trackName = "Guitar"
+                , trackInstrument = Guitar{tuning = map Pitch [40, 45, 50, 55, 59, 64], stringCount = 6}
+                , trackChannel = MidiChannel 0
+                , trackBeats = Map.empty
+                }
+            ]
+        , songMeasures = [Measure (MeasureIndex 0) (TimeSignature 4 4) (KeySignature 0 Major) Nothing]
+        }
+
 -- A song with one measure and one track with some beats
 songWithBeats :: Song
 songWithBeats =
-    defaultSong
+    blankSong
         { songTracks =
-            [ (head (songTracks defaultSong))
+            [ (head (songTracks blankSong))
                 { trackBeats =
                     Map.singleton
                         (MeasureIndex 0)
@@ -47,7 +64,7 @@ tests =
         [ testGroup
             "fret entry"
             [ testCase "entering fret 5 creates a note" $ do
-                st <- mkState defaultSong
+                st <- mkState blankSong
                 let st' = enterFretDigit 5 st
                     track = head (songTracks (asSong st'))
                     beats = beatsForTrackMeasure track (MeasureIndex 0)
@@ -57,7 +74,7 @@ tests =
                 length (beatNotes beat) @?= 1
                 noteFret (head (beatNotes beat)) @?= Just (FretNumber 5)
             , testCase "two-digit fret: 1 then 2 = fret 12" $ do
-                st <- mkState defaultSong
+                st <- mkState blankSong
                 let st' = enterFretDigit 1 st
                     st'' = enterFretDigit 2 st'
                     track = head (songTracks (asSong st''))
@@ -65,7 +82,7 @@ tests =
                     beat = head beats
                 noteFret (head (beatNotes beat)) @?= Just (FretNumber 12)
             , testCase "two-digit overflow: 3 then 5 = fret 5 (35 > 24)" $ do
-                st <- mkState defaultSong
+                st <- mkState blankSong
                 let st' = enterFretDigit 3 st
                     st'' = enterFretDigit 5 st'
                     track = head (songTracks (asSong st''))
@@ -107,20 +124,20 @@ tests =
         , testGroup
             "undo/redo"
             [ testCase "undo restores previous song" $ do
-                st <- mkState defaultSong
+                st <- mkState blankSong
                 let original = asSong st
                     st' = enterFretDigit 5 st
                     st'' = undo st'
                 asSong st'' @?= original
             , testCase "redo re-applies" $ do
-                st <- mkState defaultSong
+                st <- mkState blankSong
                 let st' = enterFretDigit 5 st
                     edited = asSong st'
                     st'' = undo st'
                     st''' = redo st''
                 asSong st''' @?= edited
             , testCase "new edit clears redo stack" $ do
-                st <- mkState defaultSong
+                st <- mkState blankSong
                 let st' = enterFretDigit 5 st
                     st'' = undo st'
                     st''' = enterFretDigit 3 st''

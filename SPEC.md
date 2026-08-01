@@ -234,45 +234,56 @@ B──────────────────│───────�
 - "TAB" replaces string tuning labels on the left (GP convention)
 - Empty strings show unbroken lines `────────`
 
-**"Both" mode — standard notation rendered as inline image above tab (GP-style):**
+**"Both" mode — standard notation rendered as inline Sixel image above tab (GP-style):**
 
-When display mode is `TabAndNotation`, a full graphical notation image renders above the tab grid using the **Kitty graphics protocol**. This produces pixel-rendered notation (treble clef, note heads, stems, beams, rests, accidentals, key/time signatures) matching Guitar Pro's visual quality.
+When display mode is `TabAndNotation`, a full graphical notation image renders above the tab grid as a **Sixel image** (treble clef, note heads, stems, beams, rests, accidentals, key/time signatures) matching Guitar Pro's visual quality. Notation glyphs are drawn from the **Bravura** SMuFL font, which termtab rasterizes itself and blits to the terminal. Rendering therefore never depends on the terminal's configured font, on font fallback for Private Use Area codepoints, or on Bravura being installed system-wide — the previous text-glyph approach (emitting SMuFL PUA codepoints as cell text) cannot work reliably because a TUI cannot instruct the terminal which font to use for a cell.
 
 **Critical: the notation image and tab grid must be column-aligned.** The notation renderer must produce an image whose beat positions match the tab's column positions pixel-for-pixel. Measure bar lines run continuously through both.
 
 #### Notation Rendering Pipeline
 
-1. Convert visible measures from `Song` data into Lilypond syntax (`.ly`)
-2. Invoke `lilypond` subprocess to render to PNG (cropped, transparent background)
-3. Encode PNG as base64 and display inline via Kitty graphics protocol escape sequences
-4. The image width is computed from the tab's column layout so beats align vertically
+termtab owns the full rendering pipeline; there is no LilyPond subprocess and no dependency on system-installed fonts.
 
-If Lilypond proves impractical (latency, installation burden, layout control), switch to a custom renderer using `diagrams-cairo`:
-- Draw staff lines, clef, key/time signatures, note heads, stems, beams, rests directly
-- Render to PNG via Cairo
-- Full control over horizontal spacing to match tab columns exactly
-- More work upfront but no external dependency beyond Cairo (available via Nix)
+1. **Layout** — from the visible measures of `Song`, compute a pixel-space layout: staff line y-positions, clef/key/time-signature positions, and each beat's x-position, derived from the tab's column layout so beats align vertically with the tab below.
+2. **Rasterize** — draw the layout into an in-memory RGBA image buffer (`JuicyPixels`). Staff lines, stems, beams, and bar lines are drawn as primitives; noteheads, clefs, rests, accidentals, and dynamics are SMuFL glyphs rasterized from the bundled **Bravura** font via FreeType (`freetype2` bindings), which handles Bravura's OpenType/CFF outlines.
+3. **Encode** — convert the image buffer to the active terminal graphics protocol (see below) and emit it inline via escape sequences.
+4. Image width is computed from the tab's column layout so beat x-positions match tab columns pixel-for-pixel.
+
+#### Font Bundling
+
+- Bravura is provided at build time via Nix (`openlilylib-fonts.bravura`) and its path baked into the binary, mirroring how `TERMTAB_SOUNDFONT` / `soundfont-fluid` is wired for the SoundFont.
+- Runtime override via a `TERMTAB_BRAVURA_FONT` env var for development.
+- Only the SMuFL codepoints actually used are rasterized; glyph bitmaps are cached per `(glyph, pixel-size)` so glyphs are not re-rasterized every frame.
 
 #### Terminal Graphics Protocol
 
-**Primary: Kitty graphics protocol**
-- Send PNG images inline via APC escape sequences with base64-encoded data
-- Images integrate with text and scroll naturally
-- Custom implementation (~300 LoC) in `Termtab.Graphics.Kitty`
+No single graphics protocol covers all target terminals: **Kitty does not support Sixel** (it implements only its own protocol), while **iTerm2 does not support the Kitty protocol**. Supporting Kitty, iTerm2, and WezTerm therefore requires **two backends selected by runtime detection**. Both consume the same `JuicyPixels` image buffer produced by the pipeline above; only the final encode + emit differs.
 
-**Fallback: Sixel** (future)
-- Use the `sixel` Hackage package for terminals that support Sixel but not Kitty (xterm, iTerm2, mlterm)
-- Same rendering pipeline, different display protocol
+**Backend A: Kitty graphics protocol** — `Termtab.Graphics.Kitty`
+- Covers Kitty, WezTerm, Ghostty.
+- PNG/RGBA payload chunked and base64-encoded, sent via APC (`_G…`) escape sequences.
+
+**Backend B: Sixel** — `Termtab.Graphics.Sixel`
+- Covers iTerm2, WezTerm, foot, xterm (`-ti vt340`), mlterm, contour.
+- Encode the RGBA buffer → Sixel bytes (hand-rolled, or the `sixel` Hackage package if it fits).
+
+**Detection & selection**
+- Prefer Kitty protocol where available (better integration, no palette limits), else Sixel, else the text fallback.
+- Detect via `$TERM`/`$TERM_PROGRAM`/`$KITTY_WINDOW_ID` plus a Device Attributes (DA) query for Sixel support; allow an explicit override env var (`TERMTAB_GRAPHICS=kitty|sixel|text`).
 
 **Fallback: Unicode text** (degraded)
-- For terminals with no graphics support, fall back to the current ASCII staff placeholder
-- `NotationOnly` mode shows the text stub; `TabAndNotation` shows tab only with a message
+- For terminals with no graphics support, fall back to the current Unicode staff placeholder.
+- `NotationOnly` mode shows the text stub; `TabAndNotation` shows tab only with a message.
+
+#### vty / Redraw Integration
+
+- vty owns the screen via a cell-diff model; the Sixel payload is written outside that model. termtab positions the cursor to the notation region, emits the Sixel bytes, and reserves those rows so vty's diff does not clobber the image (re-emitting on redraw when the region is dirtied). This coupling with vty's redraw is the main integration risk and is prototyped first (see plan).
 
 #### Nix Integration
 
-- Add `lilypond` to devshell and package runtime dependencies
-- Add `diagrams-cairo` or `cairo` to cabal deps (only if custom renderer is needed)
-- Kitty protocol implementation is pure Haskell (no extra deps beyond `base64-bytestring`)
+- Add `openlilylib-fonts.bravura` to package runtime inputs and the devshell; expose its path to the build like `soundfont-fluid` / `TERMTAB_SOUNDFONT`.
+- Add `JuicyPixels` and `freetype2` (with the `freetype` system lib via `pkgconfig-depends`) to cabal deps; the Kitty backend needs `base64-bytestring`; add `sixel` only if the Hackage encoder is used instead of a hand-rolled one.
+- No LilyPond, no Cairo, no system font installation required.
 
 #### Beat Spacing
 

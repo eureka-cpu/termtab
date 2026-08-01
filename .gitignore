@@ -1,2 +1,4 @@
 /dist-newstyle
 *result*
+# Local font downloads — Bravura is provided via Nix (openlilylib-fonts.bravura)
+/data

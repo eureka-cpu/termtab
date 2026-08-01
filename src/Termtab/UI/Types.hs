@@ -116,8 +116,8 @@ initAppState mPath song bChan =
         [ (TrackIndex i, defaultModeFor (trackInstrument t))
         | (i, t) <- zip [0 ..] (songTracks song)
         ]
-    defaultModeFor (Guitar _ _) = TabOnly
-    defaultModeFor (Bass _ _) = TabOnly
+    defaultModeFor (Guitar _ _) = TabAndNotation
+    defaultModeFor (Bass _ _) = TabAndNotation
     defaultModeFor (Standard _) = NotationOnly
 
 -- Helpers

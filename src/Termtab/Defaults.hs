@@ -24,7 +24,30 @@ defaultTrack =
         { trackName = "Guitar"
         , trackInstrument = Guitar{tuning = standardTuning, stringCount = 6}
         , trackChannel = MidiChannel 0
-        , trackBeats = Map.empty
+        , trackBeats =
+            Map.singleton (MeasureIndex 0) $
+                [ mkBeat Quarter [(5, 0, 40), (4, 2, 47)] -- E2 + B2
+                , mkBeat Quarter [(3, 2, 52)] -- E3
+                , mkBeat Quarter [(2, 0, 55)] -- G3
+                , mkBeat Quarter [(1, 3, 62), (0, 0, 64)] -- D4 + E4
+                ]
+        }
+
+mkBeat :: Duration -> [(Int, Int, Int)] -> Beat
+mkBeat dur notes =
+    Beat
+        { beatDuration = dur
+        , beatNotes =
+            [ Note
+                { notePitch = Pitch pitch
+                , noteVelocity = Velocity 100
+                , noteEffects = []
+                , noteString = Just (StringIndex s)
+                , noteFret = Just (FretNumber f)
+                }
+            | (s, f, pitch) <- notes
+            ]
+        , beatIsRest = False
         }
 
 -- | Generate the initial beat list for a time signature (all quarter rests).

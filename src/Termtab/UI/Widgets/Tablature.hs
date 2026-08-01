@@ -1,4 +1,4 @@
-module Termtab.UI.Widgets.Tablature (renderTablature, cursorAttr, playheadAttr, selectionAttr, barLineAttr, stringLabelAttr) where
+module Termtab.UI.Widgets.Tablature (renderTablature, cursorAttr, playheadAttr, selectionAttr, barLineAttr, stringLabelAttr, findVisibleRange, beatColumnWidth) where
 
 import Brick hiding (zoom)
 import Data.Map.Strict qualified as Map

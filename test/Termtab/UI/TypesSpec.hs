@@ -32,7 +32,7 @@ tests =
                 asZoom st @?= 4
             , testCase "guitar track defaults to TabOnly" $ do
                 st <- mkState defaultSong
-                Map.lookup (TrackIndex 0) (asDisplayModes st) @?= Just TabOnly
+                Map.lookup (TrackIndex 0) (asDisplayModes st) @?= Just TabAndNotation
             ]
         , testGroup
             "navigation"
@@ -62,14 +62,14 @@ tests =
             ]
         , testGroup
             "display mode"
-            [ testCase "cycles TabOnly -> NotationOnly -> TabAndNotation -> TabOnly" $ do
+            [ testCase "cycles TabAndNotation -> TabOnly -> NotationOnly -> TabAndNotation" $ do
                 st <- mkState defaultSong
                 let st1 = cycleDisplayMode st
-                Map.lookup (TrackIndex 0) (asDisplayModes st1) @?= Just NotationOnly
+                Map.lookup (TrackIndex 0) (asDisplayModes st1) @?= Just TabOnly
                 let st2 = cycleDisplayMode st1
-                Map.lookup (TrackIndex 0) (asDisplayModes st2) @?= Just TabAndNotation
+                Map.lookup (TrackIndex 0) (asDisplayModes st2) @?= Just NotationOnly
                 let st3 = cycleDisplayMode st2
-                Map.lookup (TrackIndex 0) (asDisplayModes st3) @?= Just TabOnly
+                Map.lookup (TrackIndex 0) (asDisplayModes st3) @?= Just TabAndNotation
             ]
         , testGroup
             "zoom"

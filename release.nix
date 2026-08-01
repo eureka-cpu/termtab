@@ -27,8 +27,14 @@ let
       };
     };
 
+  # Bravura ships under a lilypond-version-dependent subpath; pin the .otf to a
+  # stable store path so the build/runtime never hardcodes the lilypond version.
+  bravuraOtf = pkgs.runCommand "bravura-otf" { } ''
+    cp "$(find ${pkgs.openlilylib-fonts.bravura} -name Bravura.otf | head -1)" "$out"
+  '';
+
   termtab = pkgs.haskellPackages.callCabal2nix "termtab" workspace.src {
-    inherit (pkgs) fluidsynth;
+    inherit (pkgs) fluidsynth freetype;
   };
 
   checks = {
@@ -70,5 +76,6 @@ in
       haskell-language-server
     ]);
     TERMTAB_SOUNDFONT = "${pkgs.soundfont-fluid}/share/soundfonts/FluidR3_GM2-2.sf2";
+    TERMTAB_BRAVURA_FONT = "${bravuraOtf}";
   };
 }

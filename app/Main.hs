@@ -11,6 +11,7 @@ import System.IO (hPrint, hPutStrLn, stderr)
 import Termtab.Audio (AudioConfig (..), BackendType (..), withAudioEngine)
 import Termtab.Audio.Playback (playNote, playSequence)
 import Termtab.Defaults (defaultSong)
+import Termtab.Graphics.Health (runHealthCheck)
 import Termtab.Parser.Common (parseFile)
 import Termtab.Types
 import Termtab.UI (runUI)
@@ -19,6 +20,7 @@ data Action
     = ActionDisplay
     | ActionPlayNote Int
     | ActionPlaySong
+    | ActionHealth
 
 data Options = Options
     { optFile :: Maybe FilePath
@@ -26,8 +28,14 @@ data Options = Options
     }
 
 actionParser :: Parser Action
-actionParser = playNoteP <|> playSongP <|> pure ActionDisplay
+actionParser = playNoteP <|> playSongP <|> healthP <|> pure ActionDisplay
   where
+    healthP =
+        flag'
+            ActionHealth
+            ( long "health"
+                <> help "Report the detected terminal graphics protocol and Bravura font status, then exit"
+            )
     playNoteP =
         ActionPlayNote
             <$> option
@@ -86,6 +94,13 @@ getSoundFontPath = do
 main :: IO ()
 main = do
     opts <- customExecParser (prefs showHelpOnEmpty) parserInfo
+    case optAction opts of
+        ActionHealth -> runHealthCheck
+        _ -> runWithSong opts
+
+-- | Load the requested song (or the default scratch track) and dispatch.
+runWithSong :: Options -> IO ()
+runWithSong opts = do
     song <- case optFile opts of
         Nothing -> return defaultSong
         Just path -> do
@@ -94,6 +109,7 @@ main = do
                 Left err -> hPrint stderr err >> exitFailure
                 Right s -> return s
     case optAction opts of
+        ActionHealth -> return () -- handled in main
         ActionDisplay ->
             runUI (optFile opts) song
         ActionPlayNote midiNote -> do
